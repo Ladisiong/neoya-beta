@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.neoulai.com/sitemap.xml
+Sitemap: https://neoya.kr/sitemap.xml
