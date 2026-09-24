@@ -22,7 +22,7 @@
   var P = C.Plugins || {};
   var SUPABASE_URL = 'https://iwrblahmszuthemfrhmy.supabase.co';
   var CALLBACK = 'com.neoulai.app://auth/callback';
-  var SITE = 'https://www.neoulai.com/';
+  var SITE = 'https://neoya.kr/';
 
   /** 소셜 로그인을 시스템 브라우저로 연다 (웹뷰 차단 우회). */
   function nativeOAuth(provider) {

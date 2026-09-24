@@ -2,6 +2,28 @@
   "cleanUrls": true,
   "redirects": [
     {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/:path*",
+      "permanent": true
+    },
+    {
       "source": "/free",
       "destination": "/free/",
       "permanent": false
