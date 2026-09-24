@@ -2,6 +2,50 @@
   "cleanUrls": true,
   "redirects": [
     {
+      "source": "/free/",
+      "has": [
+        {
+          "type": "host",
+          "value": "neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/free/",
+      "permanent": true
+    },
+    {
+      "source": "/free/:path+",
+      "has": [
+        {
+          "type": "host",
+          "value": "neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/free/:path+",
+      "permanent": true
+    },
+    {
+      "source": "/free/",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/free/",
+      "permanent": true
+    },
+    {
+      "source": "/free/:path+",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.neoulai.com"
+        }
+      ],
+      "destination": "https://neoya.kr/free/:path+",
+      "permanent": true
+    },
+    {
       "source": "/",
       "has": [
         {
