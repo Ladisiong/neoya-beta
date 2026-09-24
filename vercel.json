@@ -18,11 +18,11 @@
     },
     {
       "source": "/free/",
-      "destination": "https://neoul-download.vercel.app/"
+      "destination": "https://neoya-download.vercel.app/"
     },
     {
       "source": "/free/:path*",
-      "destination": "https://neoul-download.vercel.app/:path*"
+      "destination": "https://neoya-download.vercel.app/:path*"
     }
   ],
   "headers": [
@@ -32,6 +32,21 @@
         {
           "type": "host",
           "value": "neoul-beta.vercel.app"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "neoya-beta.vercel.app"
         }
       ],
       "headers": [

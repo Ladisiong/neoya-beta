@@ -1,4 +1,4 @@
-/* 너울(NEOUL) 네이티브 앱 브릿지 v1.1 — Android(TWA) 표시 + iOS(Capacitor) 로그인 브릿지.
+/* 너야(NEOYA) 네이티브 앱 브릿지 v1.1 — Android(TWA) 표시 + iOS(Capacitor) 로그인 브릿지.
    일반 웹 브라우저·Android TWA(Chrome)에서는 첫 줄에서 즉시 종료되어 아무 동작도 하지 않는다.
 
    해결하는 문제: iOS 앱은 WKWebView로 사이트를 표시하는데, 구글 OAuth는 임베디드 웹뷰를
@@ -11,10 +11,10 @@
 (function () {
   'use strict';
   /* Android 앱(TWA)에서 열린 경우도 네이티브로 표시한다 — 첫 진입의 referrer(android-app://)를 세션에 기억.
-     스토어 결제 정책 대응: html.neoul-native 에서는 앱 내 업셀 문구(.nv-upsell)를 숨긴다. */
+     스토어 결제 정책 대응: html.neoya-native 에서는 앱 내 업셀 문구(.nv-upsell)를 숨긴다. */
   try {
-    var twa = (document.referrer || '').indexOf('android-app://com.neoulai.app') === 0 || sessionStorage.getItem('neoul_twa') === '1';
-    if (twa) { sessionStorage.setItem('neoul_twa', '1'); document.documentElement.classList.add('neoul-native', 'neoul-twa'); }
+    var twa = (document.referrer || '').indexOf('android-app://com.neoulai.app') === 0 || sessionStorage.getItem('neoya_twa') === '1';
+    if (twa) { sessionStorage.setItem('neoya_twa', '1'); document.documentElement.classList.add('neoya-native', 'neoya-twa'); }
   } catch (e) { /* 저장소 차단 환경 */ }
   var C = window.Capacitor;
   if (!C || typeof C.isNativePlatform !== 'function' || !C.isNativePlatform()) { return; }
@@ -37,12 +37,12 @@
 
   /** 사이트가 정의한 window.nbOAuth 를 네이티브 버전으로 감싼다 (정의될 때까지 대기). */
   function install() {
-    if (typeof window.nbOAuth === 'function' && !window.nbOAuth.__neoulNative) {
+    if (typeof window.nbOAuth === 'function' && !window.nbOAuth.__neoyaNative) {
       var orig = window.nbOAuth;
       var wrapped = function (provider) {
         try { return nativeOAuth(provider); } catch (e) { return orig(provider); }
       };
-      wrapped.__neoulNative = true;
+      wrapped.__neoyaNative = true;
       window.nbOAuth = wrapped;
       return true;
     }
@@ -67,7 +67,7 @@
     });
   }
 
-  /** 네이티브 보정: 상태바 스타일, 문서 플래그(CSS 훅 .neoul-native). */
+  /** 네이티브 보정: 상태바 스타일, 문서 플래그(CSS 훅 .neoya-native). */
   try { if (P.StatusBar && typeof P.StatusBar.setStyle === 'function') { P.StatusBar.setStyle({ style: 'DARK' }); } } catch (e) { /* noop */ }
-  document.documentElement.classList.add('neoul-native');
+  document.documentElement.classList.add('neoya-native');
 })();

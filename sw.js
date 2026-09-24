@@ -1,9 +1,9 @@
-/* 너울(NEOUL) 서비스 워커 v1
+/* 너야(NEOYA) 서비스 워커 v1
    전략: 동일 출처 GET만 취급한다. 문서·정적 자산은 네트워크 우선(network-first),
    실패 시에만 캐시로 폴백한다. 외부 출처(esm.sh·Supabase)와 비 GET 요청은
    서비스 워커가 건드리지 않고 그대로 통과시킨다. 낡은 화면을 강제로
    보여주는 사고를 구조적으로 차단하기 위한 설계다. */
-var CACHE = 'neoul-v2';
+var CACHE = 'neoya-v2';
 
 /* 프리캐시(install 단계 addAll)는 의도적으로 하지 않는다.
    첫 방문 때 문서를 한 번 더 받아 대역폭을 뺏고 LCP·Speed Index를 악화시킨다
@@ -55,7 +55,7 @@ self.addEventListener('fetch', function (e) {
 self.addEventListener('push', function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : '' }; }
-  var title = d.title || '너울';
+  var title = d.title || '너야';
   var opts = { body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', data: { url: d.url || '/app' } };
   e.waitUntil(self.registration.showNotification(title, opts));
 });
