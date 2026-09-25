@@ -2,91 +2,36 @@
   "cleanUrls": true,
   "redirects": [
     {
-      "source": "/free/",
+      "source": "/(.*)",
       "has": [
         {
           "type": "host",
           "value": "neoulai.com"
         }
       ],
-      "destination": "https://neoya.kr/free/",
+      "destination": "https://neoya.kr/$1",
       "permanent": true
     },
     {
-      "source": "/free/:path+",
-      "has": [
-        {
-          "type": "host",
-          "value": "neoulai.com"
-        }
-      ],
-      "destination": "https://neoya.kr/free/:path+",
-      "permanent": true
-    },
-    {
-      "source": "/free/",
+      "source": "/(.*)",
       "has": [
         {
           "type": "host",
           "value": "www.neoulai.com"
         }
       ],
-      "destination": "https://neoya.kr/free/",
+      "destination": "https://neoya.kr/$1",
       "permanent": true
     },
     {
-      "source": "/free/:path+",
+      "source": "/(.*)",
       "has": [
         {
           "type": "host",
-          "value": "www.neoulai.com"
+          "value": "neoul-beta.vercel.app"
         }
       ],
-      "destination": "https://neoya.kr/free/:path+",
-      "permanent": true
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "neoulai.com"
-        }
-      ],
-      "destination": "https://neoya.kr/",
-      "permanent": true
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.neoulai.com"
-        }
-      ],
-      "destination": "https://neoya.kr/",
-      "permanent": true
-    },
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "neoulai.com"
-        }
-      ],
-      "destination": "https://neoya.kr/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.neoulai.com"
-        }
-      ],
-      "destination": "https://neoya.kr/:path*",
+      "destination": "https://neoya.kr/$1",
       "permanent": true
     },
     {
