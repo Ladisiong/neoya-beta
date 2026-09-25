@@ -3,7 +3,7 @@
    실패 시에만 캐시로 폴백한다. 외부 출처(esm.sh·Supabase)와 비 GET 요청은
    서비스 워커가 건드리지 않고 그대로 통과시킨다. 낡은 화면을 강제로
    보여주는 사고를 구조적으로 차단하기 위한 설계다. */
-var CACHE = 'neoya-v2';
+var CACHE = 'neoya-v3';
 
 /* 프리캐시(install 단계 addAll)는 의도적으로 하지 않는다.
    첫 방문 때 문서를 한 번 더 받아 대역폭을 뺏고 LCP·Speed Index를 악화시킨다

@@ -489,7 +489,7 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
     </div>
     <div>
       <div style="font-size:.72rem;font-weight:800;letter-spacing:.06em;color:#9AA5B1;margin-bottom:12px">문의 · 고객센터</div>
-      <a href="mailto:hello@neoulai.com" style="display:block;font-size:.85rem;color:#CBD2D9;text-decoration:none;padding:4px 0">hello@neoulai.com</a>
+      <a href="mailto:hello@neoya.kr" style="display:block;font-size:.85rem;color:#CBD2D9;text-decoration:none;padding:4px 0">hello@neoya.kr</a>
       <a href="#" onclick="nvOpenChat();return false" style="display:block;font-size:.85rem;color:#CBD2D9;text-decoration:none;padding:4px 0">💬 AI 고객센터 (실시간)</a>
       <a href="#login" onclick="return showLogin(event)" style="display:block;font-size:.85rem;color:#CBD2D9;text-decoration:none;padding:4px 0">💻 PC로 너야 시작하기 →</a>
     </div>
@@ -1196,7 +1196,7 @@ try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.
   // form -> google sheet (Apps Script webhook)
   var SHEET_WEBHOOK="___APPS_SCRIPT_WEBAPP_URL___";
   var f=document.getElementById('contactForm');
-  f.addEventListener('submit',async function(e){e.preventDefault();var btn=document.getElementById('submitBtn'),msg=document.getElementById('formMsg');var data=Object.fromEntries(new FormData(f).entries());data.submitted_at=new Date().toLocaleString('ko-KR');if(SHEET_WEBHOOK.indexOf('___')===0){msg.style.color='#8C6719';msg.textContent='접수 준비 중입니다. hello@neoulai.com 으로 문의해 주세요.';return;}btn.disabled=true;btn.textContent='보내는 중...';msg.textContent='';try{await fetch(SHEET_WEBHOOK,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(data)});f.reset();msg.style.color='#2B5F8B';msg.textContent='문의가 접수되었어요. 빠르게 회신드리겠습니다. 감사합니다!';}catch(err){msg.style.color='#C53030';msg.textContent='전송 오류 — hello@neoulai.com 으로 보내주세요.';}btn.disabled=false;btn.textContent='문의 보내기';});
+  f.addEventListener('submit',async function(e){e.preventDefault();var btn=document.getElementById('submitBtn'),msg=document.getElementById('formMsg');var data=Object.fromEntries(new FormData(f).entries());data.submitted_at=new Date().toLocaleString('ko-KR');if(SHEET_WEBHOOK.indexOf('___')===0){msg.style.color='#8C6719';msg.textContent='접수 준비 중입니다. hello@neoya.kr 으로 문의해 주세요.';return;}btn.disabled=true;btn.textContent='보내는 중...';msg.textContent='';try{await fetch(SHEET_WEBHOOK,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(data)});f.reset();msg.style.color='#2B5F8B';msg.textContent='문의가 접수되었어요. 빠르게 회신드리겠습니다. 감사합니다!';}catch(err){msg.style.color='#C53030';msg.textContent='전송 오류 — hello@neoya.kr 으로 보내주세요.';}btn.disabled=false;btn.textContent='문의 보내기';});
   if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 
 })();
@@ -1295,7 +1295,7 @@ try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.
   function add(role,text){ var d=document.createElement("div"); d.className="nvMsg "+(role==="user"?"u":"a"); d.textContent=text; var log=document.getElementById("nvChatLog"); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
   window.nvOpenChat=function(){ var p=document.getElementById("nvChatPanel"),f=document.getElementById("nvChatFab"); p.classList.add("on"); f.style.display="none"; if(!greeted){ greeted=true; add("assistant","안녕하세요! 너야 AI 고객센터예요 😊 베타·요금·앱·기능 무엇이든 물어보세요."); } document.getElementById("nvChatInput").focus(); };
   window.nvCloseChat=function(){ document.getElementById("nvChatPanel").classList.remove("on"); document.getElementById("nvChatFab").style.display="flex"; };
-  window.nvSend=function(e){ e.preventDefault(); if(busy) return false; var inp=document.getElementById("nvChatInput"); var q=(inp.value||"").trim(); if(!q) return false; inp.value=""; add("user",q); hist.push({role:"user",content:q}); busy=true; var wait=add("assistant","…"); fetch(EP,{method:"POST",headers:{"content-type":"application/json","apikey":K,"authorization":"Bearer "+K},body:JSON.stringify({messages:hist})}).then(function(r){return r.json();}).then(function(j){ var t=(j&&j.text)||"죄송해요, 잠시 후 다시 시도해 주세요. 급하시면 hello@neoulai.com으로 문의 주세요."; wait.textContent=t; hist.push({role:"assistant",content:t}); }).catch(function(){ wait.textContent="연결이 원활하지 않아요. 잠시 후 다시 시도하거나 hello@neoulai.com으로 문의 주세요."; }).finally(function(){ busy=false; }); return false; };
+  window.nvSend=function(e){ e.preventDefault(); if(busy) return false; var inp=document.getElementById("nvChatInput"); var q=(inp.value||"").trim(); if(!q) return false; inp.value=""; add("user",q); hist.push({role:"user",content:q}); busy=true; var wait=add("assistant","…"); fetch(EP,{method:"POST",headers:{"content-type":"application/json","apikey":K,"authorization":"Bearer "+K},body:JSON.stringify({messages:hist})}).then(function(r){return r.json();}).then(function(j){ var t=(j&&j.text)||"죄송해요, 잠시 후 다시 시도해 주세요. 급하시면 hello@neoya.kr으로 문의 주세요."; wait.textContent=t; hist.push({role:"assistant",content:t}); }).catch(function(){ wait.textContent="연결이 원활하지 않아요. 잠시 후 다시 시도하거나 hello@neoya.kr으로 문의 주세요."; }).finally(function(){ busy=false; }); return false; };
 })();
 </script>
 
