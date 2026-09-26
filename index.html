@@ -710,7 +710,7 @@ function CalDB(){
   <p class="subtle">진단·매칭에서 만든 5회독 일정이 <b>실제 DB(review_events)</b>에서 표시됩니다. 진도 클릭 = 상세 기록.</p>
   <div class="card"><div class="cal">${cells}</div><div class="leg">${[1,2,3,4,5].map(r=>`<span><span class="sw" style="background:${COL[r-1]}"></span>${r}회독</span>`).join('')} <span style="margin-left:auto">DB 이벤트 ${state.dbRev.length}건</span></div></div>
   ${state.dbRev.length?'':'<div class="note">아직 5회독 일정이 없어요. <b>진단·매칭 → ‘5회독 학습 달력 만들기’</b>를 누르면 DB에 생성됩니다.</div>'}`);}
-function TodayDB(){const tS=new Date().toISOString().slice(0,10);
+function TodayDB(){const tS=new Date(Date.now()+324e5).toISOString().slice(0,10);
  const due=state.dbRev.filter(r=>r.scheduled_date<=tS&&r.status!=='done').sort((a,b)=>a.scheduled_date<b.scheduled_date?-1:1);
  const doneN=state.dbRev.filter(r=>r.status==='done').length;
  const rows=due.map(e=>{const k='db'+e.id;const run=state.timing[k];const meta=run!=null?'· <b style="color:var(--mid)">복습 중</b> <span class="tmr" id="t-'+k+'">⏱ 0분 0초</span>':'· '+e.scheduled_date+(e.scheduled_date<tS?' <b style="color:var(--c1)">(지남)</b>':'');
@@ -1415,7 +1415,7 @@ html.nv-fab #nvAiFab{display:flex}
 })();
 </script>
 <!-- ▲▲ 앱 내부 AI 도우미 통합 버튼 끝 ▲▲ -->
-<!-- ▼▼ 앱 셸 v1 — 폰/태블릿 하단 탭 5 + 집중 타이머 + 주간 스트립 (열품타 기준, 2026-09-09). 데스크톱 무변경: 전 규칙 html.nv-appshell 가드 ▼▼ -->
+<!-- ▼▼ 앱 셸 v2 — 하단 탭 5 + 순공 엔진(과목별·이탈 자동 일시정지·DB 기록) + 오늘의 과제 카드 + 12주 잔디 + 스트릭 실계산 (2026-09-26 · 벤치마크 열품타·밀당PT·듀오링고). 웹(데스크톱)도 같은 기능: 상단 탭 '집중·순공' + 우측 패널. 하단 탭·앱 크롬은 html.nv-appshell 가드 ▼▼ -->
 <style>
 /* 앱 셸은 네이티브(TWA/Capacitor)·홈화면 설치(standalone)·좁은 폰 화면·미리보기(?shell=1)에서만 켜진다. 데스크톱 웹은 절대 건드리지 않는다. */
 html.nv-appshell #tabs{display:none}
@@ -1438,51 +1438,105 @@ html.nv-appshell.nv-inapp #nvNav{display:flex}
 #nvNav .nvNavFocus .nvNavDisc svg{width:24px;height:24px;stroke:#F5F9FC}
 #nvNav .nvNavFocus.on{color:#1A3A5C}
 #nvNav .nvNavFocus.on .nvNavDisc{background:#2B5F8B}
+#nvNav .nvNavFocus.nvLive .nvNavDisc{background:#2B5F8B}
 
 /* '나'(성장) 탭 상단 퀵링크 — 상단 탭이 숨겨진 앱 셸에서 단권화·성장 리포트·진단으로 이동 */
 html.nv-appshell #nvHub{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
 html.nv-appshell #nvHub button{flex:1;min-width:96px;min-height:44px;border:1px solid #E4E7EB;background:#FFFFFF;border-radius:12px;color:#1A3A5C;font-weight:700;font-size:.82rem;font-family:inherit;cursor:pointer}
 html.nv-appshell #nvHub button:active{background:#EDF1F5}
 
-/* 집중 화면 — 전체 오버레이 (열품타식 대형 타이머) */
+/* 집중 화면 — 전체 오버레이 (열품타식 과목별 스톱워치) */
 #nvFocus{position:fixed;inset:0;z-index:99999;display:none;flex-direction:column;background:#F5F9FC;color:#1F2933;font-family:inherit;overflow-y:auto;
   padding:calc(14px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom))}
 html.nv-focus-on #nvFocus{display:flex}
+/* 웹(데스크톱): 집중 화면을 우측 패널로 — 왼쪽 학습 화면은 그대로 보인다 */
+html:not(.nv-appshell) #nvFocus{left:auto;width:min(460px,100vw);border-left:1px solid #E4E7EB;box-shadow:-12px 0 32px rgba(26,58,92,.16)}
+#nvFocus > *{flex-shrink:0}
 html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
-#nvFocus .nvFcTop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#nvFocus .nvFcTop{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 #nvFocus .nvFcTitle{font-weight:800;font-size:1.1rem;color:#1A3A5C}
 #nvFocus .nvFcClose{width:44px;height:44px;border:none;background:#EDF1F5;border-radius:12px;cursor:pointer;font-size:1.1rem;color:#1F2933;font-family:inherit}
 #nvFocus .nvFcClose:active{background:#E4E7EB}
-#nvFcClock{font-variant-numeric:tabular-nums;font-weight:800;font-size:4.4rem;line-height:1.05;text-align:center;color:#1A3A5C;letter-spacing:-.02em;margin:26px 0 4px}
-#nvFocus .nvFcHint{text-align:center;color:#616E7C;font-size:.82rem;margin-bottom:20px}
-#nvFocus .nvFcBtns{display:flex;gap:10px;justify-content:center;margin-bottom:8px}
-#nvFocus .nvFcBtns button{min-height:48px;padding:0 22px;border-radius:12px;border:1px solid #E4E7EB;background:#FFFFFF;color:#1F2933;font-weight:700;font-size:.92rem;cursor:pointer;font-family:inherit}
+#nvFocus button:focus-visible,#nvTodayCard button:focus-visible,#nvNav button:focus-visible{outline:2px solid #2B5F8B;outline-offset:2px}
+#nvFocus .nvSum{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin-bottom:12px}
+#nvFocus .nvSumTop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+#nvFocus .nvSumL{font-size:.78rem;color:#616E7C;font-weight:700}
+#nvFocus .nvSumG{font-size:.78rem;color:#616E7C}
+#nvFocus .nvSumV{font-size:1.5rem;font-weight:800;color:#1A3A5C;font-variant-numeric:tabular-nums;margin-top:2px}
+#nvFocus .nvSumS{font-size:.74rem;color:#616E7C}
+.nvBarT{height:8px;background:#EDF1F5;border-radius:9999px;overflow:hidden;margin:10px 0 6px}
+.nvBarT i{display:block;height:100%;background:#2B5F8B;border-radius:9999px;transition:width 240ms cubic-bezier(0.2,0,0,1)}
+#nvFocus .nvSec{font-size:.78rem;font-weight:700;color:#3E4C59;margin:4px 0 8px}
+.nvChips{display:flex;gap:6px;flex-wrap:wrap}
+.nvChips button{min-height:44px;padding:0 14px;border-radius:9999px;border:1px solid #E4E7EB;background:#FFFFFF;color:#3E4C59;font-weight:700;font-size:.84rem;font-family:inherit;cursor:pointer;transition:background 160ms cubic-bezier(0.2,0,0,1)}
+.nvChips button.on{background:#1A3A5C;border-color:#1A3A5C;color:#F5F9FC}
+.nvChips button:disabled{opacity:.45;cursor:default}
+#nvFcClock{font-variant-numeric:tabular-nums;font-weight:800;font-size:4.2rem;line-height:1.05;text-align:center;color:#1A3A5C;letter-spacing:-.02em;margin:22px 0 6px}
+#nvFcNote{min-height:20px;text-align:center;font-size:.8rem;color:#616E7C;margin:0 0 14px;line-height:1.5}
+#nvFcNote.nvWarn{color:#8C6719;background:#FAF3E0;border-radius:8px;padding:8px 10px}
+#nvFocus .nvFcBtns{display:flex;gap:10px;justify-content:center;margin-bottom:18px}
+#nvFocus .nvFcBtns button{min-height:48px;min-width:112px;padding:0 22px;border-radius:12px;border:1px solid #E4E7EB;background:#FFFFFF;color:#1F2933;font-weight:700;font-size:.92rem;cursor:pointer;font-family:inherit}
 #nvFocus .nvFcBtns .nvGo{background:#2B5F8B;color:#F5F9FC;border-color:#2B5F8B}
 #nvFocus .nvFcBtns .nvGo:active{background:#1A3A5C}
 #nvFocus .nvFcBtns .nvStop{background:#C53030;color:#F5F9FC;border-color:#C53030}
-#nvFcTotal{text-align:center;color:#616E7C;font-size:.8rem;margin:6px 0 24px}
-#nvFcTotal b{color:#1A3A5C}
 #nvFocus .nvCard{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:16px;margin-bottom:14px}
 #nvFocus .nvCard h3{margin:0 0 4px;font-size:.96rem;color:#1A3A5C}
 #nvFocus .nvCard p{margin:0 0 12px;font-size:.8rem;color:#616E7C;line-height:1.5}
 #nvFocus .nvReviewGo{width:100%;min-height:48px;border:none;border-radius:12px;background:#1A3A5C;color:#F5F9FC;font-weight:700;font-size:.9rem;cursor:pointer;font-family:inherit}
 #nvFocus .nvReviewGo:active{background:#2B5F8B}
-/* 주간 학습 스트립 */
-#nvWeek{display:flex;gap:6px;justify-content:space-between}
-#nvWeek .nvWd{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
-#nvWeek .nvBar{width:100%;max-width:34px;height:64px;background:#EDF1F5;border-radius:8px;position:relative;overflow:hidden;display:flex;align-items:flex-end}
-#nvWeek .nvBarFill{width:100%;background:#2B5F8B;border-radius:8px;min-height:3px;transition:height 220ms cubic-bezier(0.2,0,0,1)}
-#nvWeek .nvBar.nvToday .nvBarFill{background:#1A3A5C}
-#nvWeek .nvWdL{font-size:.66rem;color:#616E7C}
-#nvWeek .nvWdN{font-size:.66rem;color:#1A3A5C;font-weight:700}
+/* 오늘 과목별 */
+#nvSubjList .nvSr{display:flex;align-items:center;gap:10px;margin:8px 0}
+#nvSubjList .nvSrN{width:72px;font-size:.8rem;font-weight:700;color:#1F2933;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nvSubjList .nvSrB{flex:1;height:8px;background:#EDF1F5;border-radius:9999px;overflow:hidden}
+#nvSubjList .nvSrB i{display:block;height:100%;background:#5A8CB5;border-radius:9999px}
+#nvSubjList .nvSrV{width:78px;text-align:right;font-size:.78rem;color:#3E4C59;font-variant-numeric:tabular-nums;flex:none}
+#nvSubjList .nvEmpty{font-size:.8rem;color:#616E7C;line-height:1.5}
+/* 12주 잔디 — 칸마다 날짜·시간 라벨 동반(색 단독 전달 금지) */
+#nvHeat{display:flex;gap:3px}
+#nvHeat .nvHc{flex:1;display:flex;flex-direction:column;gap:3px}
+#nvHeat span{display:block;width:100%;aspect-ratio:1/1;border-radius:2px;background:#EDF1F5}
+#nvHeat .nvH1,.nvHeatLeg .nvH1{background:#D3E2EF}
+#nvHeat .nvH2,.nvHeatLeg .nvH2{background:#A8C4DD}
+#nvHeat .nvH3,.nvHeatLeg .nvH3{background:#5A8CB5}
+#nvHeat .nvH4,.nvHeatLeg .nvH4{background:#1A3A5C}
+#nvHeat .nvHf{background:transparent}
+.nvHeatLeg{display:flex;align-items:center;gap:4px;justify-content:flex-end;font-size:.68rem;color:#616E7C;margin-top:8px}
+.nvHeatLeg span{width:10px;height:10px;border-radius:2px;display:inline-block;background:#EDF1F5}
+#nvFocus .nvHeatSum{font-size:.8rem;color:#3E4C59;margin:0 0 10px}
+
+/* 오늘의 과제 카드 — '오늘' 탭 맨 위 (앱 셸 전용) */
+#nvTodayCard{display:block;background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:0 0 12px}
+html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
+#nvTodayCard .nvTcHead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+#nvTodayCard .nvTcHead b{font-size:.98rem;color:#1A3A5C}
+#nvTodayCard .nvTcHead span{font-size:.78rem;color:#616E7C;font-weight:700}
+#nvTodayCard .nvTcItem{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #EDF1F5}
+#nvTodayCard .nvTcChk{flex:none;width:22px;height:22px;border-radius:9999px;border:2px solid #CBD2D9;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;color:#FFFFFF;margin-top:1px}
+#nvTodayCard .nvTcItem.ok .nvTcChk{background:#256745;border-color:#256745}
+#nvTodayCard .nvTcBody{flex:1;min-width:0}
+#nvTodayCard .nvTcTxt{font-size:.86rem;color:#1F2933;font-weight:600;line-height:1.45}
+#nvTodayCard .nvTcItem.ok .nvTcTxt{color:#256745}
+#nvTodayCard .nvBarT{margin:8px 0 0}
+#nvTodayCard .nvTcRun{font-size:.8rem;color:#214F86;background:#E7EEF7;border-radius:8px;padding:8px 10px;margin:6px 0 2px}
+#nvTodayCard .nvTcFoot{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:10px 0 12px;font-size:.8rem;color:#616E7C}
+#nvTodayCard .nvTcFoot b{color:#1A3A5C;font-size:.9rem}
+#nvTodayCard .nvTcBtns{display:flex;gap:8px}
+#nvTodayCard .nvTcBtns button{flex:1;min-height:48px;border-radius:12px;border:1px solid #E4E7EB;background:#FFFFFF;color:#1A3A5C;font-weight:700;font-size:.9rem;font-family:inherit;cursor:pointer}
+#nvTodayCard .nvTcBtns .nvTcGo{background:#1A3A5C;border-color:#1A3A5C;color:#F5F9FC}
+#nvTodayCard .nvTcBtns .nvTcGo:active{background:#2B5F8B}
 </style>
 <script>
-/* 앱 셸 v1 — 데스크톱 웹은 절대 변경하지 않고, 폰/태블릿 앱 문맥에서만 하단 탭·집중 타이머를 얹는다.
-   기존 go()·doRevDB()·state 를 그대로 재사용한다(새 학습 루프를 만들지 않는다). */
+/* 앱 셸 v2 — 폰/태블릿 앱 문맥에서는 하단 탭·앱 크롬을, 웹(데스크톱)에서는 상단 탭 '집중·순공'과 우측 패널을 얹는다.
+   집중(순공)·오늘의 과제·잔디·스트릭 기능은 두 화면이 같은 코드와 같은 DB를 쓴다.
+   기존 go()·doRevDB()·state 를 그대로 재사용한다(새 학습 루프를 만들지 않는다).
+   순공 규칙(열품타 벤치마크): 화면을 벗어나면 자동으로 멈추고, 벗어난 시간은 순공에 넣지 않는다.
+   기록 규칙: 종료한 세션만 focus_sessions(DB)에 저장한다. 오프라인이면 이 기기에 줄 세웠다가 연결되면 올린다. */
 (function () {
+  if (window.__nvAppV2) { return; }
+  window.__nvAppV2 = true;
   var root = document.documentElement;
 
-  /* 앱 셸 활성 판정: 네이티브 클래스 / standalone / 좁은 폰폭 / ?shell=1 */
+  /* 앱 셸 활성 판정: 네이티브 클래스 / /app 경로 / standalone / ?shell=1 / 좁은 폰폭 */
   function isAppPath() { try { return location.pathname === '/app' || location.pathname.indexOf('/app/') === 0 || location.search.indexOf('app=1') !== -1; } catch (e) { return false; } }
   function shellWanted() {
     try {
@@ -1501,6 +1555,24 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
     if (window.matchMedia) { window.matchMedia('(display-mode: standalone)').addEventListener('change', applyShell); }
   } catch (e) { }
 
+  /* ── 공통 유틸 (날짜는 한국 시간 기준) ── */
+  function kstDate(ms) { return new Date((ms == null ? Date.now() : ms) + 324e5).toISOString().slice(0, 10); }
+  function kstMidnightIso() { return new Date(kstDate() + 'T00:00:00+09:00').toISOString(); }
+  /* 저장소: 이 페이지에서 쓴 값은 메모리에도 보관한다 — localStorage 가 막히거나 가득 차도 세션·큐가 사라지지 않게 */
+  var MEM = {};
+  function lsGet(k, d) {
+    if (Object.prototype.hasOwnProperty.call(MEM, k)) { try { return JSON.parse(MEM[k]); } catch (e) { return d; } }
+    try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; }
+  }
+  function lsSet(k, v) { var s = JSON.stringify(v); MEM[k] = s; try { localStorage.setItem(k, s); } catch (e) { } }
+  function lsDel(k) { MEM[k] = 'null'; try { localStorage.removeItem(k); } catch (e) { } }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[c]; }); }
+  function fmtClock(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; var mm = (m < 10 ? '0' : '') + m, xx = (x < 10 ? '0' : '') + x; return h ? h + ':' + mm + ':' + xx : mm + ':' + xx; }
+  function fmtHM(s) { s = Math.max(0, Math.floor(s || 0)); var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); if (s > 0 && s < 60) { return s + '초'; } if (!h) { return m + '분'; } return h + '시간' + (m ? ' ' + m + '분' : ''); }
+  function user() { return (window.NB && window.NB.user) ? window.NB.user : null; }
+  function sb() { return (user() && window.NB.sb) ? window.NB.sb : null; }
+  function st() { return window.state || {}; }
+
   /* ── 하단 탭바 ── */
   var IC = {
     today: '<svg viewBox="0 0 24 24"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13l2 2 4-4"/></svg>',
@@ -1517,13 +1589,12 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
   }).join('');
   document.body.appendChild(nav);
 
+  var lastK = '';
   function inApp() { var a = document.getElementById('app'); return !!(a && !a.classList.contains('hidden')); }
   function syncInApp() { root.classList.toggle('nv-inapp', inApp()); }
   function syncNav(k) {
-    var cur = k || (document.querySelector('.tab.on') ? document.querySelector('.tab.on').dataset.k : '');
-    Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) {
-      b.classList.toggle('on', b.dataset.k === cur);
-    });
+    var cur0 = k || (document.querySelector('.tab.on') ? document.querySelector('.tab.on').dataset.k : '');
+    Array.prototype.forEach.call(nav.querySelectorAll('button'), function (b) { var on = b.dataset.k === cur0; b.classList.toggle('on', on); if (on) { b.setAttribute('aria-current', 'page'); } else { b.removeAttribute('aria-current'); } });
   }
   nav.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) { return; }
@@ -1532,7 +1603,7 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
     if (window.go) { window.go(k); }
   });
 
-  /* '나'(성장) 화면 상단에 단권화·성장 리포트·진단 퀵링크를 얹는다 (앱 셸에서만). go()가 #view를 새로 그리므로 그 직후 삽입한다. */
+  /* '나'(성장) 화면 상단에 단권화·성장 리포트·진단 퀵링크 (앱 셸에서만) */
   function injectHub(k) {
     if (!root.classList.contains('nv-appshell') || k !== 'shop') { return; }
     var view = document.getElementById('view'); if (!view || document.getElementById('nvHub')) { return; }
@@ -1542,72 +1613,383 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
     view.insertBefore(hub, view.firstChild);
   }
 
-  /* go()를 감싸 탭 전환 시 하단 탭 하이라이트를 맞추고, 이동하면 집중 화면을 닫는다. */
+  /* go()를 감싸 탭 전환 시 하단 탭 하이라이트·허브·오늘의 과제 카드를 맞추고, 이동하면 집중 화면을 닫는다(세션은 일시정지로 보존). */
   function wrapGo() {
-    if (typeof window.go === 'function' && !window.go.__nvWrapped) {
+    if (typeof window.go === 'function' && !window.go.__nvWrapV2) {
       var orig = window.go;
-      var wrapped = function (k) { var r = orig.apply(this, arguments); try { closeFocus(); syncNav(k); injectHub(k); } catch (e) { } return r; };
-      wrapped.__nvWrapped = true; window.go = wrapped; return true;
+      var wrapped = function (k) { var r = orig.apply(this, arguments); try { lastK = k; closeFocus(); syncNav(k); injectHub(k); renderTodayCard(); } catch (e) { } return r; };
+      wrapped.__nvWrapV2 = true; window.go = wrapped; return true;
     }
     return false;
   }
   if (!wrapGo()) { var gt = 0, gi = setInterval(function () { if (wrapGo() || ++gt > 150) { clearInterval(gi); } }, 100); }
 
-  /* ── 집중 화면 (열품타식 대형 타이머) ── */
-  var focus = document.createElement('div'); focus.id = 'nvFocus'; focus.setAttribute('role', 'dialog'); focus.setAttribute('aria-label', '집중');
+  /* 복습 완료 후 요약·스트릭을 다시 읽는다 */
+  function wrapReview() {
+    if (typeof window.nbCompleteReview === 'function' && !window.nbCompleteReview.__nvWrapV2) {
+      var orig = window.nbCompleteReview;
+      /* 원래 반환값(프로미스)을 그대로 돌려주고, 요약·스트릭 갱신은 뒤에서 기다리지 않고 건다 */
+      var wrapped = function () { var r = orig.apply(this, arguments); try { Promise.resolve(r).then(function () { refreshData(); }, function () { }); } catch (e) { } return r; };
+      wrapped.__nvWrapV2 = true; window.nbCompleteReview = wrapped; return true;
+    }
+    return false;
+  }
+  if (!wrapReview()) { var rt = 0, ri = setInterval(function () { if (wrapReview() || ++rt > 300) { clearInterval(ri); } }, 200); }
+
+  /* ── 집중 화면 마크업 ── */
+  var focus = document.createElement('div'); focus.id = 'nvFocus'; focus.setAttribute('role', 'dialog'); focus.setAttribute('aria-modal', 'true'); focus.setAttribute('aria-label', '집중');
   focus.innerHTML =
     '<div class="nvFcTop"><span class="nvFcTitle">집중</span><button type="button" class="nvFcClose" id="nvFcClose" aria-label="닫기">✕</button></div>'
-    + '<div id="nvFcClock">00:00</div>'
-    + '<div class="nvFcHint">자유 집중 — 이 시간은 <b>이 기기</b>에 저장됩니다(서버 학습 기록 아님).</div>'
-    + '<div class="nvFcBtns"><button type="button" class="nvGo" id="nvFcStart">시작</button><button type="button" id="nvFcReset">초기화</button></div>'
-    + '<div id="nvFcTotal"></div>'
+    + '<div class="nvSum"><div class="nvSumTop"><span class="nvSumL">오늘 순공</span><span class="nvSumG" id="nvGoalTxt"></span></div>'
+    + '<div class="nvSumV" id="nvSumV">0분</div><div class="nvBarT" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="nvSumBarW"><i id="nvSumBar" style="width:0%"></i></div>'
+    + '<div class="nvSumS" id="nvSumS"></div></div>'
+    + '<div class="nvSec">과목</div><div class="nvChips" id="nvSubj"></div>'
+    + '<div id="nvFcClock" aria-live="off">00:00</div>'
+    + '<div id="nvFcNote" aria-live="polite"></div>'
+    + '<div class="nvFcBtns" id="nvFcBtns"></div>'
+    + '<div class="nvCard"><h3>오늘 과목별</h3><p id="nvSubjHint"></p><div id="nvSubjList"></div></div>'
+    + '<div class="nvCard"><h3>최근 12주</h3><p class="nvHeatSum" id="nvHeatSum"></p><div id="nvHeat" role="img"></div>'
+    + '<div class="nvHeatLeg"><em style="font-style:normal">0</em><span class="nvH0"></span><span class="nvH1"></span><span class="nvH2"></span><span class="nvH3"></span><span class="nvH4"></span><em style="font-style:normal">6시간 이상</em></div></div>'
+    + '<div class="nvCard"><h3>하루 순공 목표</h3><p>오늘의 과제 카드와 진행 막대에 쓰여요.</p><div class="nvChips" id="nvGoal"></div></div>'
     + '<div class="nvCard" id="nvPushCard"><h3>복습 알림 받기</h3><p id="nvPushDesc">오늘 할 복습을 폰 알림으로 받아요. 브라우저 알림 권한이 필요합니다.</p><button type="button" class="nvReviewGo" id="nvPushBtn">알림 켜기</button><div id="nvPushState" style="margin-top:8px;font-size:.78rem;color:#616E7C;line-height:1.5"></div></div>'
-    + '<div class="nvCard"><h3>오늘 복습으로 집중</h3><p>복습을 시작하면 소요 시간이 <b>학습 기록(DB)</b>에 남고 XP가 올라갑니다. 여기 자유 집중과 달리 성장 리포트에 반영됩니다.</p><button type="button" class="nvReviewGo" id="nvFcReview">오늘의 복습 열기</button></div>'
-    + '<div class="nvCard"><h3>최근 7일</h3><p>완료한 복습 수입니다.</p><div id="nvWeek"></div></div>';
+    + '<div class="nvCard"><h3>오늘 복습으로 집중</h3><p>5회독 복습은 복습 화면의 타이머로 따로 기록되고 오늘 순공에 함께 더해져요.</p><button type="button" class="nvReviewGo" id="nvFcReview">오늘의 복습 열기</button></div>';
   document.body.appendChild(focus);
 
-  var clock = focus.querySelector('#nvFcClock'), startBtn = focus.querySelector('#nvFcStart');
-  var running = false, base = 0, elapsed = 0, tick = null, wakeLock = null;
+  var clock = focus.querySelector('#nvFcClock'), noteEl = focus.querySelector('#nvFcNote');
+  function note(msg, warn) { noteEl.textContent = msg || ''; noteEl.classList.toggle('nvWarn', !!(msg && warn)); }
 
-  /* Wake Lock — 집중 중에는 화면이 꺼지지 않게 한다(열품타 핵심). 미지원 브라우저는 조용히 무시. */
-  function acquireWake() { try { if (navigator.wakeLock && navigator.wakeLock.request) { navigator.wakeLock.request('screen').then(function (w) { wakeLock = w; }).catch(function () { }); } } catch (e) { } }
-  function releaseWake() { try { if (wakeLock) { wakeLock.release().catch(function () { }); wakeLock = null; } } catch (e) { } }
-  try { document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && running) { acquireWake(); } }); } catch (e) { }
-  function todayKey() { return 'neoya_focus_' + new Date().toISOString().slice(0, 10); }
-  function readTotal() { try { return parseInt(localStorage.getItem(todayKey()) || '0', 10) || 0; } catch (e) { return 0; } }
-  function writeTotal(sec) { try { localStorage.setItem(todayKey(), String(sec)); } catch (e) { } }
-  function fmtClock(s) { var m = Math.floor(s / 60), ss = s % 60; return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss; }
-  function fmtTotal(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return (h ? h + '시간 ' : '') + m + '분'; }
-  function renderTotal() { document.getElementById('nvFcTotal').innerHTML = '오늘 자유 집중 <b>' + fmtTotal(readTotal()) + '</b> · 이 기기'; }
-  function renderClock() { clock.textContent = fmtClock(elapsed); }
-  function startF() { if (running) { return; } running = true; base = Date.now() - elapsed * 1000; startBtn.textContent = '멈춤'; startBtn.classList.remove('nvGo'); startBtn.classList.add('nvStop'); acquireWake(); tick = setInterval(function () { elapsed = Math.round((Date.now() - base) / 1000); renderClock(); }, 1000); }
-  function pauseF() { if (!running) { return; } running = false; clearInterval(tick); tick = null; releaseWake(); startBtn.textContent = '계속'; startBtn.classList.remove('nvStop'); startBtn.classList.add('nvGo'); writeTotal(readTotal() + elapsed); elapsed = 0; renderClock(); renderTotal(); }
-  startBtn.addEventListener('click', function () { if (running) { pauseF(); } else { startF(); } });
-  focus.querySelector('#nvFcReset').addEventListener('click', function () { running = false; if (tick) { clearInterval(tick); tick = null; } releaseWake(); elapsed = 0; renderClock(); startBtn.textContent = '시작'; startBtn.classList.remove('nvStop'); startBtn.classList.add('nvGo'); });
-  focus.querySelector('#nvFcReview').addEventListener('click', function () { closeFocus(); if (window.go) { window.go('today'); } });
-  focus.querySelector('#nvFcClose').addEventListener('click', closeFocus);
-
-  /* 주간 스트립: 실계정이면 state.dbRev(completed_at) 집계, 아니면 안내 */
-  function renderWeek() {
-    var wrap = document.getElementById('nvWeek'); if (!wrap) { return; }
-    var days = [], now = new Date();
-    for (var i = 6; i >= 0; i--) { var d = new Date(now); d.setDate(now.getDate() - i); days.push(d); }
-    var counts = days.map(function (d) {
-      var key = d.toISOString().slice(0, 10), c = 0;
-      try {
-        var rev = (window.state && window.state.dbRev) || [];
-        c = rev.filter(function (r) { return r.status === 'done' && String(r.completed_at || '').slice(0, 10) === key; }).length;
-      } catch (e) { }
-      return c;
-    });
-    var max = Math.max(1, Math.max.apply(null, counts));
-    var L = ['일', '월', '화', '수', '목', '금', '토'];
-    wrap.innerHTML = days.map(function (d, i) {
-      var isToday = i === 6, h = Math.round(counts[i] / max * 100);
-      return '<div class="nvWd"><div class="nvBar' + (isToday ? ' nvToday' : '') + '"><div class="nvBarFill" style="height:' + (counts[i] ? h : 0) + '%"></div></div>'
-        + '<span class="nvWdN">' + (counts[i] || '') + '</span><span class="nvWdL">' + L[d.getDay()] + '</span></div>';
-    }).join('');
+  /* ── 설정: 과목·목표 ── */
+  var CUR_KEY = 'neoya_focus_cur', Q_KEY = 'neoya_focus_q', GOAL_KEY = 'neoya_goal_min', SUBJ_KEY = 'neoya_focus_subj';
+  var SUBJ_BASE = ['국어', '수학', '영어', '탐구1', '탐구2', '한국사'];
+  var GOALS = [120, 240, 360, 480, 600];
+  function goalMin() { var g = parseInt(lsGet(GOAL_KEY, 360), 10); return GOALS.indexOf(g) >= 0 ? g : 360; }
+  function cut20(x) { return Array.from(String(x || '').trim()).slice(0, 20).join(''); }
+  function subjectList() {
+    var out = [], seen = {};
+    function add(s) { s = cut20(s); if (s && !seen[s]) { seen[s] = 1; out.push(s); } }
+    SUBJ_BASE.forEach(add);
+    try { (st().dbRev || []).forEach(function (r) { add(r.subject); }); } catch (e) { }
+    add('기타');
+    return out.slice(0, 10);
   }
+  function selSubject() { var s = lsGet(SUBJ_KEY, ''); return subjectList().indexOf(s) >= 0 ? s : subjectList()[0]; }
+
+  /* ── 순공 세션 엔진 ──
+     cur = { cid, uid, subject, startedAt, activeMs, lastResume, away, endAt } — 이 기기 저장소에 보존.
+     새로고침·앱 재실행 시에는 항상 '일시정지'로 복원하고, 마지막으로 확인된 시각(endAt)까지만 순공으로 인정한다. */
+  function num(v) { return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
+  var cur = lsGet(CUR_KEY, null), running = false, tick = null, wakeLock = null, awayAt = 0, tickN = 0, lastInteract = Date.now();
+  if (cur && (typeof cur !== 'object' || !cur.cid || !cur.subject || isNaN(num(cur.startedAt)) || isNaN(num(cur.activeMs)) || cur.activeMs < 0)) { cur = null; lsDel(CUR_KEY); }
+  if (cur) {
+    cur.subject = cut20(cur.subject);
+    if (isNaN(num(cur.endAt))) { cur.endAt = cur.startedAt; }
+    if (!isNaN(num(cur.lastResume))) { cur.activeMs += Math.max(0, cur.endAt - cur.lastResume); cur.away = (cur.away || 0) + 1; }
+    cur.lastResume = null; persist();
+  }
+  function persist() { if (cur) { lsSet(CUR_KEY, cur); } else { lsDel(CUR_KEY); } }
+  function activeSec() { if (!cur) { return 0; } return Math.floor((cur.activeMs + (running && cur.lastResume ? Date.now() - cur.lastResume : 0)) / 1000); }
+  function newCid() { return 'fs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+
+  function acquireWake() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        navigator.wakeLock.request('screen').then(function (w) { if (running) { wakeLock = w; } else { w.release().catch(function () { }); } }).catch(function () { });
+      }
+    } catch (e) { }
+  }
+  function releaseWake() { try { if (wakeLock) { wakeLock.release().catch(function () { }); wakeLock = null; } } catch (e) { } }
+  function reviewTimerOn() { try { return Object.keys(st().timing || {}).length > 0; } catch (e) { return false; } }
+
+  function startF() {
+    if (running) { return; }
+    /* 복습 타이머와 동시에 재면 같은 시간이 두 번 더해진다 */
+    if (reviewTimerOn()) { note('복습 타이머가 돌고 있어요. 복습을 먼저 종료한 뒤 집중을 시작하세요.', true); return; }
+    var msg = '다른 탭·앱으로 나가거나 화면을 끄면 자동으로 멈춰요.';
+    /* 멈춘 지 30분이 넘은 세션은 먼저 기록하고 새로 시작한다(날짜 귀속·연속성 보존) */
+    if (cur && Date.now() - (cur.endAt || cur.startedAt) > 30 * 60000) { finishF(true); msg = '30분 넘게 멈춰 있던 세션은 먼저 기록하고 새로 시작했어요.'; }
+    var u = user();
+    if (!cur) { cur = { cid: newCid(), uid: u ? u.id : null, subject: selSubject(), startedAt: Date.now(), activeMs: 0, lastResume: null, away: 0, endAt: Date.now() }; }
+    cur.lastResume = Date.now(); cur.endAt = Date.now(); running = true; lastInteract = Date.now(); persist();
+    acquireWake(); clearInterval(tick); tick = setInterval(onTick, 1000); note(msg);
+    render();
+  }
+  function pauseF(reason) {
+    if (!running || !cur) { return; }
+    var now = Date.now();
+    cur.activeMs += Math.max(0, now - cur.lastResume); cur.lastResume = null; cur.endAt = now; running = false;
+    if (reason === 'away' || reason === 'idle') { cur.away = (cur.away || 0) + 1; }
+    persist(); clearInterval(tick); tick = null; releaseWake(); render();
+  }
+  function onTick() {
+    if (!running || !cur) { return; }
+    /* 3시간 동안 화면 조작이 없으면 멈춘다(화면 켜짐 유지 상태로 자리를 비운 경우 대비) */
+    if (Date.now() - lastInteract > 3 * 3600000) { pauseF('idle'); note('3시간 동안 조작이 없어 멈췄어요. 공부 중이면 계속을 눌러 주세요.', true); return; }
+    if (++tickN % 15 === 0) { cur.endAt = Date.now(); persist(); }
+    renderClock(); renderSum();
+  }
+  try { ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) { document.addEventListener(ev, function () { lastInteract = Date.now(); }, { capture: true, passive: true }); }); } catch (e) { }
+
+  function finishF(silent) {
+    if (!cur) { return; }
+    if (running) { pauseF('stop'); }
+    var c = cur, sec = Math.floor(c.activeMs / 1000), endMs = c.endAt || Date.now();
+    cur = null; persist();
+    var span = Math.floor((endMs - c.startedAt) / 1000);
+    if (sec > span) { sec = span; }
+    if (!(sec >= 10)) { if (!silent) { note('10초 미만은 기록하지 않아요.'); } render(); return; }
+    sec = Math.min(sec, 43200);
+    var u = user(), owner = c.uid || (u ? u.id : null);
+    if (owner) {
+      /* 세션을 시작한 계정으로 저장한다(다른 계정으로 바뀌었으면 그 계정으로 로그인할 때 올라간다) */
+      var row = { subject: c.subject, started_at: new Date(c.startedAt).toISOString(), ended_at: new Date(endMs).toISOString(), duration_sec: sec, away_count: Math.min(c.away || 0, 999), source: 'timer', client_id: c.cid };
+      var q = lsGet(Q_KEY, []); q.push({ uid: owner, row: row }); lsSet(Q_KEY, q.slice(-200));
+      var label = c.subject + ' ' + fmtHM(sec);
+      if (!silent) { note(label + ' 기록 중…'); }
+      if (!u || u.id !== owner) { if (!silent) { note(label + ' — 이 세션을 시작한 계정으로 로그인하면 올라가요.', true); } }
+      else {
+        flush().then(function () {
+          if (silent) { return; }
+          var s = rowStatus(row.client_id);
+          if (s === 'saved') { note('학습 기록에 저장했어요 · ' + label); }
+          else if (s === 'bad') { note(label + ' 기록을 저장하지 못했어요. 폰의 날짜·시간이 정확한지 확인해 주세요.', true); }
+          else { note('저장 대기 중 — 연결되면 자동으로 올려요.', true); }
+        });
+      }
+    } else {
+      addLocal(kstDate(c.startedAt), c.subject, sec);
+      if (!silent) { note(c.subject + ' ' + fmtHM(sec) + ' — 이 기기에만 저장했어요. 로그인하면 학습 기록에 남아요.'); }
+      refreshData();
+    }
+    render(); renderTodayCard();
+  }
+
+  /* 오프라인 줄 세우기 → 연결되면 업로드. 같은 세션(client_id)은 서버가 한 번만 받는다.
+     - 처리한 항목만 큐에서 지운다(업로드 중에 새로 종료한 세션을 덮어쓰지 않는다).
+     - 다시 보내도 안 되는 오류(시계 오류·제약 위반·겹침)는 따로 옮겨 오늘 순공에서 뺀다. */
+  var BAD_KEY = 'neoya_focus_bad', flushing = null, flushAgain = false;
+  function isPermanent(err) { return /^(P0001|23514|23502|42501|22[0-9A-Z]{3})$/.test(String((err && err.code) || '')); }
+  function rowStatus(cid) {
+    if (lsGet(Q_KEY, []).some(function (it) { return it && it.row && it.row.client_id === cid; })) { return 'pending'; }
+    if (lsGet(BAD_KEY, []).some(function (it) { return it && it.row && it.row.client_id === cid; })) { return 'bad'; }
+    return 'saved';
+  }
+  function flush() {
+    if (flushing) { flushAgain = true; return flushing; }
+    var c = sb(), u = user();
+    if (!c || !u) { return Promise.resolve(); }
+    flushing = (async function () {
+      await Promise.resolve(); /* 대입이 끝난 뒤에 본문이 돌게 한다(동기 완료 시 flushing 이 남는 문제 차단) */
+      try {
+        do {
+          flushAgain = false;
+          var q = lsGet(Q_KEY, []), done = {}, bad = [], changed = false;
+          for (var i = 0; i < q.length; i++) {
+            var it = q[i];
+            if (!it || !it.row || it.uid !== u.id) { continue; }
+            var cid = it.row.client_id;
+            if (Date.now() - Date.parse(it.row.started_at) > 2.5 * 86400000) { done[cid] = 1; bad.push({ uid: it.uid, row: it.row, why: 'too_old' }); continue; }
+            try {
+              var r = await c.from('focus_sessions').insert(it.row);
+              if (!r.error || r.error.code === '23505') { done[cid] = 1; changed = true; }
+              else if (isPermanent(r.error)) { done[cid] = 1; bad.push({ uid: it.uid, row: it.row, why: r.error.code }); }
+            } catch (e) { }
+          }
+          var rest = lsGet(Q_KEY, []).filter(function (x) { return x && x.row && !(x.uid === u.id && done[x.row.client_id]); });
+          lsSet(Q_KEY, rest);
+          if (bad.length) { lsSet(BAD_KEY, lsGet(BAD_KEY, []).concat(bad).slice(-50)); }
+          if (changed || bad.length) { await refreshData(); }
+        } while (flushAgain);
+      } finally { flushing = null; }
+    })();
+    return flushing;
+  }
+  function pendingRows() { var u = user(); if (!u) { return []; } return lsGet(Q_KEY, []).filter(function (it) { return it && it.row && it.uid === u.id; }).map(function (it) { return it.row; }); }
+
+  /* 비로그인(체험) 모드: 이 기기에만 저장 */
+  function addLocal(dk, subj, sec) {
+    try { var k = 'neoya_focus_' + dk; localStorage.setItem(k, String((parseInt(localStorage.getItem(k) || '0', 10) || 0) + sec)); } catch (e) { }
+    var m = lsGet('neoya_focus_subj_' + dk, {}); m[subj] = (m[subj] || 0) + sec; lsSet('neoya_focus_subj_' + dk, m);
+  }
+  function localSummary() {
+    var out = [], now = Date.now();
+    for (var i = 83; i >= 0; i--) { var k = kstDate(now - i * 86400000), sec = 0; try { sec = parseInt(localStorage.getItem('neoya_focus_' + k) || '0', 10) || 0; } catch (e) { } out.push({ day: k, focus_sec: sec, manual_sec: 0, review_sec: 0, review_done: 0 }); }
+    return out;
+  }
+
+  /* ── 데이터: 일자별 요약(RPC) · 오늘 과목별 · 스트릭(서버 계산) ── */
+  var SUM = null, TODAY_SUBJ = null, loading = null, loadAgain = false;
+  async function loadOnce() {
+    var c = sb(), u = user();
+    if (!c || !u) { SUM = localSummary(); TODAY_SUBJ = lsGet('neoya_focus_subj_' + kstDate(), {}); return; }
+    try {
+      var s = await c.rpc('app_study_summary', { p_days: 84 });
+      if (!s.error && Array.isArray(s.data)) { SUM = s.data; }
+      var t = await c.from('focus_sessions').select('subject,duration_sec,source').eq('student_id', u.id).gte('started_at', kstMidnightIso());
+      if (!t.error && Array.isArray(t.data)) { var m = {}; t.data.forEach(function (r) { if (r.source === 'timer') { m[r.subject] = (m[r.subject] || 0) + (r.duration_sec || 0); } }); TODAY_SUBJ = m; }
+      var k = await c.rpc('app_refresh_streak');
+      if (!k.error && typeof k.data === 'number') { st().streak = k.data; }
+    } catch (e) { }
+  }
+  /* 요청이 겹치면 한 번 더 읽어 최신 상태로 끝낸다(업로드 직후의 요약·스트릭이 옛 값으로 남지 않게) */
+  function refreshData() {
+    if (loading) { loadAgain = true; return loading; }
+    loading = (async function () {
+      await Promise.resolve();
+      try { do { loadAgain = false; await loadOnce(); } while (loadAgain); }
+      finally { loading = null; }
+      render(); renderHeat(); renderTodayCard();
+    })();
+    return loading;
+  }
+  function todayRow() {
+    var k = kstDate(), r = (SUM || []).filter(function (x) { return String(x.day) === k; })[0];
+    return r || { focus_sec: 0, manual_sec: 0, review_sec: 0, review_done: 0 };
+  }
+  function pendingTodaySec() { var k = kstDate(); return pendingRows().filter(function (r) { return kstDate(Date.parse(r.started_at)) === k; }).reduce(function (a, r) { return a + (r.duration_sec || 0); }, 0); }
+  function liveSec() { return (cur && kstDate(cur.startedAt) === kstDate()) ? activeSec() : 0; }
+  function todayFocusSec() { return (todayRow().focus_sec || 0) + pendingTodaySec() + liveSec(); }
+  function todayStudySec() { return todayFocusSec() + (todayRow().review_sec || 0); }
+
+  /* ── 렌더 ── */
+  function renderClock() { clock.textContent = fmtClock(activeSec()); }
+  function renderSum() {
+    var tot = todayStudySec(), g = goalMin() * 60, pct = Math.min(100, Math.round(tot / g * 100));
+    focus.querySelector('#nvSumV').textContent = fmtHM(tot);
+    focus.querySelector('#nvGoalTxt').textContent = '목표 ' + fmtHM(g) + ' · ' + pct + '%';
+    focus.querySelector('#nvSumBar').style.width = pct + '%';
+    focus.querySelector('#nvSumBarW').setAttribute('aria-valuenow', String(pct));
+    focus.querySelector('#nvSumS').textContent = '집중 ' + fmtHM(todayFocusSec()) + ' · 복습 ' + fmtHM(todayRow().review_sec || 0) + (user() ? '' : ' · 체험 모드(이 기기)');
+  }
+  function renderChips() {
+    var box = focus.querySelector('#nvSubj'), active = cur ? cur.subject : selSubject(), list = subjectList();
+    if (cur && list.indexOf(cur.subject) < 0) { list.unshift(cur.subject); }
+    var h = list.map(function (s) { var on = s === active; return '<button type="button" data-s="' + esc(s) + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + (running && !on ? ' disabled' : '') + '>' + esc(s) + '</button>'; }).join('');
+    if (box.__h !== h) { box.innerHTML = h; box.__h = h; }
+    var gb = focus.querySelector('#nvGoal'), gm = goalMin();
+    var gh = GOALS.map(function (m) { var on = m === gm; return '<button type="button" data-g="' + m + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + '>' + (m / 60) + '시간</button>'; }).join('');
+    if (gb.__h !== gh) { gb.innerHTML = gh; gb.__h = gh; }
+  }
+  function renderBtns() {
+    var b = focus.querySelector('#nvFcBtns'), h;
+    if (!cur) { h = '<button type="button" class="nvGo" data-a="start">시작</button>'; }
+    else if (running) { h = '<button type="button" data-a="pause">일시정지</button><button type="button" class="nvStop" data-a="finish">종료</button>'; }
+    else { h = '<button type="button" class="nvGo" data-a="resume">계속</button><button type="button" class="nvStop" data-a="finish">종료</button>'; }
+    if (b.__h !== h) { b.innerHTML = h; b.__h = h; }
+    nav.querySelector('.nvNavFocus').classList.toggle('nvLive', !!running);
+  }
+  function renderSubj() {
+    var box = focus.querySelector('#nvSubjList'), m = {}, k;
+    var base = TODAY_SUBJ || {};
+    for (k in base) { if (Object.prototype.hasOwnProperty.call(base, k)) { m[k] = (m[k] || 0) + base[k]; } }
+    var dk = kstDate();
+    pendingRows().forEach(function (r) { if (kstDate(Date.parse(r.started_at)) === dk) { m[r.subject] = (m[r.subject] || 0) + (r.duration_sec || 0); } });
+    if (cur && liveSec()) { m[cur.subject] = (m[cur.subject] || 0) + liveSec(); }
+    var rows = Object.keys(m).map(function (s) { return [s, m[s]]; });
+    var rv = todayRow().review_sec || 0; if (rv) { rows.push(['5회독 복습', rv]); }
+    rows.sort(function (a, b) { return b[1] - a[1]; });
+    focus.querySelector('#nvSubjHint').textContent = user() ? '종료한 집중과 완료한 복습이 학습 기록(DB)에 남아요.' : '체험 모드 — 이 기기에만 저장돼요. 로그인하면 학습 기록에 남아요.';
+    if (!rows.length) { box.innerHTML = '<div class="nvEmpty">아직 오늘 기록이 없어요. 과목을 고르고 시작을 눌러 보세요.</div>'; return; }
+    var max = Math.max.apply(null, rows.map(function (r) { return r[1]; })) || 1;
+    box.innerHTML = rows.map(function (r) { return '<div class="nvSr"><span class="nvSrN">' + esc(r[0]) + '</span><span class="nvSrB"><i style="width:' + Math.max(3, Math.round(r[1] / max * 100)) + '%"></i></span><span class="nvSrV">' + fmtHM(r[1]) + '</span></div>'; }).join('');
+  }
+  function heatLevel(sec) { var m = sec / 60; return m <= 0 ? 0 : m < 60 ? 1 : m < 180 ? 2 : m < 360 ? 3 : 4; }
+  function renderHeat() {
+    var wrap = focus.querySelector('#nvHeat'); if (!wrap) { return; }
+    var map = {}, active = 0, total = 0;
+    (SUM || (user() ? [] : localSummary())).forEach(function (r) {
+      var s = (r.focus_sec || 0) + (r.review_sec || 0); map[String(r.day)] = s; total += s;
+      if ((r.review_done || 0) > 0 || (r.focus_sec || 0) >= 1500) { active++; }
+    });
+    var todayK = kstDate(), t = new Date(todayK + 'T00:00:00Z'), dow = t.getUTCDay();
+    var start = t.getTime() - (77 + dow) * 86400000, html = '';
+    for (var w = 0; w < 12; w++) {
+      html += '<div class="nvHc">';
+      for (var d = 0; d < 7; d++) {
+        var dt = new Date(start + (w * 7 + d) * 86400000), k = dt.toISOString().slice(0, 10);
+        if (k > todayK) { html += '<span class="nvHf" aria-hidden="true"></span>'; continue; }
+        var s = map[k] || 0, label = (dt.getUTCMonth() + 1) + '월 ' + dt.getUTCDate() + '일 ' + (s ? fmtHM(s) : '기록 없음');
+        html += '<span class="nvH' + heatLevel(s) + '" title="' + label + '" data-d="' + k + '"></span>';
+      }
+      html += '</div>';
+    }
+    wrap.innerHTML = html;
+    var sumTxt = '학습일 ' + active + '일 · 누적 ' + fmtHM(total) + (user() ? '' : ' (이 기기)');
+    focus.querySelector('#nvHeatSum').textContent = sumTxt;
+    wrap.setAttribute('aria-label', '최근 12주 학습 기록 — ' + sumTxt + ' · 오늘 ' + fmtHM(map[todayK] || 0));
+  }
+  function render() { renderClock(); renderSum(); renderChips(); renderBtns(); renderSubj(); }
+
+  /* ── 오늘의 과제 카드 (밀당PT '오늘의 과제' 벤치마크) ── */
+  function onTodayCard(e) {
+    var b = e.target.closest('button'); if (!b) { return; }
+    if (b.dataset.a === 'focus') { openFocus(); return; }
+    if (b.dataset.a === 'rev') {
+      var k = kstDate(), due = (st().dbRev || []).filter(function (r) { return r.scheduled_date <= k && r.status !== 'done'; }).sort(function (a, c) { return a.scheduled_date < c.scheduled_date ? -1 : 1; });
+      if (due[0] && window.doRevDB) { window.doRevDB(due[0].id, due[0].subject); }
+    }
+  }
+  function renderTodayCard() {
+    var k0 = lastK || (document.querySelector('.tab.on') ? document.querySelector('.tab.on').dataset.k : '');
+    if (k0 !== 'today') { return; }
+    var view = document.getElementById('view'); if (!view) { return; }
+    var panel = view.querySelector('.panel') || view, card = document.getElementById('nvTodayCard');
+    if (!card || !panel.contains(card)) {
+      if (card && card.parentNode) { card.parentNode.removeChild(card); }
+      card = document.createElement('div'); card.id = 'nvTodayCard'; card.addEventListener('click', onTodayCard);
+      var first = panel.firstElementChild, anchor = panel.firstChild;
+      if (first && /수능 (D-|지남)/.test(first.textContent || '')) { anchor = first.nextSibling; }
+      panel.insertBefore(card, anchor);
+    }
+    var logged = !!user(), k = kstDate();
+    var due = (st().dbRev || []).filter(function (r) { return r.scheduled_date <= k && r.status !== 'done'; });
+    var doneToday = todayRow().review_done || 0, studied = todayStudySec(), g = goalMin() * 60;
+    var ok1 = logged && due.length === 0, ok2 = studied >= g, pct = Math.min(100, Math.round(studied / g * 100));
+    var t1 = !logged ? '로그인하면 오늘 할 복습이 자동으로 채워져요'
+      : due.length ? '복습 ' + due.length + '건 남음' + (doneToday ? ' · 오늘 ' + doneToday + '건 완료' : '')
+        : (doneToday ? '오늘 복습 ' + doneToday + '건 모두 완료' : '오늘 예정된 복습 없음');
+    function item(ok, txt, extra) { return '<div class="nvTcItem' + (ok ? ' ok' : '') + '"><span class="nvTcChk" role="img" aria-label="' + (ok ? '완료' : '미완료') + '">' + (ok ? '✓' : '') + '</span><div class="nvTcBody"><div class="nvTcTxt">' + txt + '</div>' + (extra || '') + '</div></div>'; }
+    var streak = st().streak || 0;
+    card.innerHTML = '<div class="nvTcHead"><b>오늘의 과제</b><span>' + ((ok1 ? 1 : 0) + (ok2 ? 1 : 0)) + '/2 완료</span></div>'
+      + item(ok1, t1)
+      + item(ok2, '순공 ' + fmtHM(studied) + ' / 목표 ' + fmtHM(g), '<div class="nvBarT"><i style="width:' + pct + '%"></i></div>')
+      + (cur ? '<div class="nvTcRun">진행 중인 집중: ' + esc(cur.subject) + ' ' + fmtClock(activeSec()) + (running ? '' : ' · 일시정지') + '</div>' : '')
+      + '<div class="nvTcFoot">' + (logged ? '<b>연속 학습 ' + streak + '일</b><span>복습 1건 또는 순공 25분이면 이어져요</span>' : '<span>로그인하면 연속 학습 일수가 기록돼요</span>') + '</div>'
+      + '<div class="nvTcBtns"><button type="button" class="nvTcGo" data-a="focus">' + (cur ? '집중 이어가기' : '집중 시작') + '</button>' + (logged && due.length ? '<button type="button" data-a="rev">복습 시작</button>' : '') + '</div>';
+  }
+
+  /* ── 이벤트 ── */
+  focus.querySelector('#nvFcBtns').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) { return; }
+    var a = b.dataset.a;
+    if (a === 'start' || a === 'resume') { startF(); }
+    else if (a === 'pause') { pauseF('pause'); note('일시정지했어요. 계속을 누르면 이어서 잽니다.'); }
+    else if (a === 'finish') { finishF(false); }
+  });
+  focus.querySelector('#nvSubj').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b || running) { return; }
+    var s = b.dataset.s; if (!s) { return; }
+    if (cur && cur.subject !== s) { finishF(false); }
+    lsSet(SUBJ_KEY, s); render();
+  });
+  focus.querySelector('#nvGoal').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) { return; }
+    lsSet(GOAL_KEY, parseInt(b.dataset.g, 10) || 360); render(); renderTodayCard();
+  });
+  focus.querySelector('#nvFcReview').addEventListener('click', function () { closeFocus(); if (window.go) { window.go('today'); } });
+  focus.querySelector('#nvFcClose').addEventListener('click', function () { closeFocus(); });
+
+  /* 이탈 감지: 화면을 벗어나면 즉시 일시정지(벗어난 시간은 순공 제외). 돌아오면 안내만 하고 자동 재시작은 하지 않는다. */
+  try {
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') { if (running) { pauseF('away'); awayAt = Date.now(); } }
+      else {
+        if (awayAt) { note('화면을 벗어나 ' + fmtHM(Math.max(1, Math.round((Date.now() - awayAt) / 1000))) + ' 동안 멈춰 있었어요. 그 시간은 순공에 넣지 않았어요.', true); awayAt = 0; }
+        flush();
+      }
+    });
+    window.addEventListener('pagehide', function () { if (running) { pauseF('away'); } });
+    window.addEventListener('online', function () { flush(); });
+  } catch (e) { }
 
   /* ── 웹 푸시 구독 (복습 알림) ── */
   var pushBtn = focus.querySelector('#nvPushBtn'), pushState = focus.querySelector('#nvPushState'), pushDesc = focus.querySelector('#nvPushDesc');
@@ -1645,15 +2027,55 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
   }
   if (pushBtn) { pushBtn.addEventListener('click', enablePush); }
 
-  function openFocus() { renderTotal(); renderClock(); renderWeek(); refreshPushState(); root.classList.add('nv-focus-on'); syncNav('focus'); }
-  function closeFocus() { root.classList.remove('nv-focus-on'); if (running) { pauseF(); } syncNav(); }
+  var returnFocusTo = null;
+  function openFocus() {
+    if (cur && !running && !noteEl.textContent) { note('멈춘 세션이 있어요 — ' + cur.subject + ' ' + fmtClock(activeSec()) + '. 계속하거나 종료하세요.'); }
+    returnFocusTo = document.activeElement;
+    render(); renderHeat(); refreshPushState(); root.classList.add('nv-focus-on'); syncNav('focus');
+    try { focus.querySelector('#nvFcClose').focus({ preventScroll: true }); } catch (e) { }
+    flush().then(function () { return refreshData(); });
+  }
+  function closeFocus() {
+    var wasOn = root.classList.contains('nv-focus-on');
+    root.classList.remove('nv-focus-on');
+    if (running) { pauseF('close'); note('집중 화면을 닫아 일시정지했어요.'); }
+    if (wasOn) {
+      syncNav(); renderTodayCard();
+      try { var back = (returnFocusTo && document.contains(returnFocusTo)) ? returnFocusTo : nav.querySelector('.nvNavFocus'); if (back && back.focus) { back.focus({ preventScroll: true }); } } catch (e) { }
+    }
+  }
+  try { document.addEventListener('keydown', function (e) { if ((e.key === 'Escape' || e.key === 'Esc') && root.classList.contains('nv-focus-on')) { closeFocus(); } }); } catch (e) { }
   window.nvOpenFocus = openFocus; window.nvCloseFocus = closeFocus;
+  /* 웹(데스크톱) 진입점: 상단 탭 줄의 '오늘의 복습' 옆에 '집중·순공' 탭을 붙인다(학생 탭 구성일 때만).
+     탭 줄은 로그인·모드 전환 때마다 새로 그려지므로 변경을 지켜보다가 다시 붙인다. */
+  function injectTab() {
+    var tabs = document.getElementById('tabs'); if (!tabs || tabs.querySelector('[data-k="focus"]')) { return; }
+    var today = tabs.querySelector('.tab[data-k="today"]'); if (!today) { return; }
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'tab nvFocusTab'; b.setAttribute('data-k', 'focus'); b.textContent = '집중·순공';
+    b.addEventListener('click', function (e) { e.preventDefault(); openFocus(); });
+    today.parentNode.insertBefore(b, today.nextSibling);
+  }
+  try { var tabsEl = document.getElementById('tabs'); if (tabsEl) { new MutationObserver(injectTab).observe(tabsEl, { childList: true }); } } catch (e) { }
+  injectTab();
+  window.nvApp = { refresh: refreshData, flush: flush, version: 'v2a-web-2026-09-26' };
 
-  /* #app 표시 여부를 관찰해 하단 탭 노출을 맞춘다(마케팅 홈·로그인에서는 숨김). */
-  function watch(id, attr) { var el = document.getElementById(id); if (!el) { return; } try { new MutationObserver(function () { syncInApp(); syncNav(); }).observe(el, { attributes: true, attributeFilter: [attr] }); } catch (e) { } }
+  /* 로그인 사용자가 바뀌면(또는 앱에 처음 들어오면) 줄 세운 기록을 올리고 요약·스트릭을 새로 읽는다.
+     6시간 넘게 멈춰 있던 세션은 그때까지의 순공으로 자동 기록한다. */
+  var loadedFor = null;
+  function onAppState() {
+    syncInApp(); syncNav();
+    if (!inApp()) { return; }
+    var who = user() ? user().id : 'guest';
+    if (who === loadedFor) { return; }
+    loadedFor = who;
+    if (user() && cur && !running && Date.now() - (cur.endAt || cur.startedAt) > 6 * 3600000) { finishF(true); }
+    flush().then(function () { return refreshData(); });
+  }
+  function watch(id, attr) { var el = document.getElementById(id); if (!el) { return; } try { new MutationObserver(onAppState).observe(el, { attributes: true, attributeFilter: [attr] }); } catch (e) { } }
   watch('app', 'class');
-  syncInApp(); syncNav();
-  setTimeout(function () { syncInApp(); syncNav(); }, 1200);
+  onAppState();
+  setTimeout(onAppState, 1200);
+  setInterval(function () { if (inApp() && (user() ? user().id : 'guest') !== loadedFor) { onAppState(); } }, 3000);
 
   /* /app 진입점: 앱으로 바로 들어오는 URL. 세션이 있으면 부트되어 #app이 뜨고,
      로그인 안 된 상태로 마케팅 홈만 떠 있으면 로그인 화면으로 보낸다(마케팅 랜딩 건너뜀). */
@@ -1661,16 +2083,16 @@ html.nv-focus-on #nvNav,html.nv-focus-on #nvAiFab{display:none!important}
     var tries = 0;
     var appTimer = setInterval(function () {
       var app = document.getElementById('app'), login = document.getElementById('login'), home = document.getElementById('home');
-      var inApp = app && !app.classList.contains('hidden');
+      var shown = app && !app.classList.contains('hidden');
       var onLogin = login && !login.classList.contains('hidden');
-      var user = window.state && window.state.user;
-      if (inApp || onLogin || user) { clearInterval(appTimer); return; }
+      var usr = window.state && window.state.user;
+      if (shown || onLogin || usr) { clearInterval(appTimer); return; }
       if (home && !home.classList.contains('hidden') && window.showLogin) { window.showLogin(); clearInterval(appTimer); return; }
       if (++tries > 40) { clearInterval(appTimer); }
     }, 150);
   }
 })();
 </script>
-<!-- ▲▲ 앱 셸 v1 끝 ▲▲ -->
+<!-- ▲▲ 앱 셸 v2 끝 ▲▲ -->
 <script src="/native-bridge.js" defer></script>
 </body></html>
