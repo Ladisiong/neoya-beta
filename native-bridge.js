@@ -13,7 +13,7 @@
   /* Android 앱(TWA)에서 열린 경우도 네이티브로 표시한다 — 첫 진입의 referrer(android-app://)를 세션에 기억.
      스토어 결제 정책 대응: html.neoya-native 에서는 앱 내 업셀 문구(.nv-upsell)를 숨긴다. */
   try {
-    var twa = (document.referrer || '').indexOf('android-app://com.neoulai.app') === 0 || sessionStorage.getItem('neoya_twa') === '1';
+    var twa = /^android-app:\/\/(kr\.neoya\.app|com\.neoulai\.app)(\/|$)/.test(document.referrer || '') || sessionStorage.getItem('neoya_twa') === '1';
     if (twa) { sessionStorage.setItem('neoya_twa', '1'); document.documentElement.classList.add('neoya-native', 'neoya-twa'); }
   } catch (e) { /* 저장소 차단 환경 */ }
   var C = window.Capacitor;

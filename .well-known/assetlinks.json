@@ -1,6 +1,21 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "kr.neoya.app",
+      "sha256_cert_fingerprints": [
+        "7C:4B:6B:3F:4E:D0:2C:F1:93:AB:A0:CB:D5:93:DD:82:37:1E:DC:2B:8A:38:8C:70:83:F4:99:43:75:DB:4E:F3",
+        "74:62:BD:71:C2:21:18:45:BA:EC:D5:D0:7D:A9:7A:C4:E9:50:D0:39:07:48:71:EE:76:25:DA:08:87:D2:E5:75"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.neoulai.app",
