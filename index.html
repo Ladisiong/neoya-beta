@@ -716,8 +716,8 @@ function TodayDB(){const tS=new Date(Date.now()+324e5).toISOString().slice(0,10)
  const rows=due.map(e=>{const k='db'+e.id;const run=state.timing[k];const meta=run!=null?'· <b style="color:var(--mid)">복습 중</b> <span class="tmr" id="t-'+k+'">⏱ 0분 0초</span>':'· '+e.scheduled_date+(e.scheduled_date<tS?' <b style="color:var(--c1)">(지남)</b>':'');
    return `<div class="rev"><div class="dot" style="background:${COL[(e.round-1)%5]}">${e.round}회<small>독</small></div><div class="m"><b>${e.subject} (${e.page_range||''})</b><span>${e.round}회독 ${meta}</span></div><button class="do ${run!=null?'run':''}" onclick="doRevDB(${e.id},'${e.subject}')">${run!=null?'■ 복습 종료':'복습 시작'}</button></div>`;}).join('');
  return el(`${ddayBanner()}<h2 class="sec">오늘의 복습 <span class="auto">${tS} · 실데이터</span></h2>
-  <p class="subtle">DB의 5회독 일정에서 오늘·지난 복습을 띄웁니다. 완료하면 <b>소요 시간이 DB에 기록</b>됩니다.</p>
-  ${rows||'<div class="card">예정된 복습이 없어요. 진단·매칭에서 5회독 달력을 만들어 보세요.</div>'}
+  <p class="subtle">오늘·지난 회독을 띄웁니다. 개념마다 <b>알아요 / 몰라요</b>를 체크하면 아는 것은 지워지고 모르는 것만 남아 단권화가 됩니다.</p>
+  ${rows||'<div class="card">오늘 할 복습이 없어요. 오늘 들은 강의를 등록하면 1·3·7·11·15일 5회독 일정이 잡혀요.</div>'}
   <div class="note"><b>누적:</b> 완료 ${doneN}건 (DB). 이 기록이 성장 리포트로 집계됩니다.</div>`);}
 function doRevDB(id,subj){const k='db'+id;if(state.timing[k]==null){state.timing[k]=Date.now();if(!window._tk)window._tk=setInterval(updateTimers,1000);go('today');toast(subj+' 복습 시작 — 타이머');}else{var sec=Math.round((Date.now()-state.timing[k])/1000);delete state.timing[k];addXp(20);addPts(50);if(window.nbCompleteReview)window.nbCompleteReview(id,sec);toast('+20 XP · '+subj+' 복습 완료 ('+fmt(sec)+') · DB 기록');}}
 function openHistDB(id){const e=state.dbRev.find(r=>r.id===id);if(!e)return;const sw=e.status==='done'?'완료':e.status==='missed'?'미완료':'예정';
@@ -1160,7 +1160,7 @@ window.nbSaveDiagnosis=async(r)=>{const st=window.state;if(!window.NB.user)retur
 window.nbPersistXp=async(n)=>{const st=window.state;if(!window.NB.user)return;const uid=window.NB.user.id;await SB.from('xp_log').insert({student_id:uid,action:'activity',xp:n});await SB.from('gamification').update({xp:st.xp,level:st.lvl,points:st.points,updated_at:new Date().toISOString()}).eq('student_id',uid);};
 window.nbClaim=async(key)=>{if(!window.NB.user)return;await SB.from('missions').upsert({student_id:window.NB.user.id,mission_key:key,claimed:true,for_date:new Date().toISOString().slice(0,10)},{onConflict:'student_id,mission_key,for_date'});};
 window.nbCreatePlan=async(r)=>{if(!window.NB.user)return;const uid=window.NB.user.id;const today=new Date().toISOString().slice(0,10);
-  await SB.from('study_items').delete().eq('student_id',uid).eq('subject',r.worst);if(r.enroll)await SB.from('enrollments').delete().eq('student_id',uid).eq('subject',r.worst);
+  await SB.from('study_items').delete().eq('student_id',uid).eq('subject',r.worst).neq('origin','lecture');if(r.enroll)await SB.from('enrollments').delete().eq('student_id',uid).eq('subject',r.worst);
   let enrId=null,lecName,pgRange,lecNo=null;if(r.enroll){const {data:en}=await SB.from('enrollments').insert({student_id:uid,subject:r.worst,instructor:r.enroll.instructor,course:r.enroll.course,total_lectures:r.enroll.total,current_lecture:r.enroll.current}).select().single();if(en)enrId=en.id;lecName=r.enroll.instructor+' '+r.enroll.course;lecNo=r.enroll.current||null;pgRange=r.enroll.current?('1~'+r.enroll.current+'강 진도'):'수강 진도';}else{lecName=(r.insts&&r.insts[0]?r.insts[0][0]:'추천 강의');pgRange='진단 약점 범위';}
   const {data:si}=await SB.from('study_items').insert({student_id:uid,subject:r.worst,page_range:pgRange,lecture_name:lecName,lecture_date:today,enrollment_id:enrId,lecture_no:lecNo}).select().single();
   if(si){try{const {data:ses}=await SB.auth.getSession();await fetch('https://iwrblahmszuthemfrhmy.supabase.co/functions/v1/schedule-reviews',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+ses.session.access_token},body:JSON.stringify({study_item_id:si.id})});}catch(e){}}
@@ -2094,5 +2094,786 @@ html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
 })();
 </script>
 <!-- ▲▲ 앱 셸 v2 끝 ▲▲ -->
+<!-- ▼▼ 코어 루프 v1 — 5회독 소거 → 단권화 → 약점 문제 (2026-09-26 · CVO 핵심가치 · D-2095). 회독마다 개념을 알아요/몰라요로 거르고, 다른 날 두 번 연속 알아요면 지우며, 다섯 번 확인해도 남은 것이 단권화가 된다. 남은 것은 약점 문제로 계속 메운다 ▼▼ -->
+<style>
+html.nv-sheet-on{overflow:hidden}
+.nvSheet{position:fixed;inset:0;z-index:100001;display:none;background:rgba(26,58,92,.32);align-items:flex-end;justify-content:center}
+.nvSheet.on{display:flex}
+.nvSheet .nvShIn{width:100%;max-width:560px;max-height:92vh;overflow-y:auto;background:#FFFFFF;border-radius:12px 12px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px rgba(26,58,92,.16);font-family:inherit;color:#1F2933}
+@media (min-width:720px){.nvSheet{align-items:center}.nvSheet .nvShIn{border-radius:12px;padding:22px 22px 20px}}
+.nvShHead{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.nvShHead .nvShT{flex:1;min-width:0}
+.nvShHead .nvShT b{display:block;font-size:1.06rem;color:#1A3A5C;line-height:1.35}
+.nvShHead .nvShT span{display:block;font-size:.8rem;color:#616E7C;margin-top:2px;overflow-wrap:anywhere}
+.nvShX{flex:none;min-width:44px;min-height:44px;border:1px solid #E4E7EB;background:#FFFFFF;border-radius:12px;color:#1A3A5C;font-size:1rem;font-family:inherit;cursor:pointer}
+.nvShTmr{flex:none;font-size:.8rem;font-weight:700;color:#214F86;background:#E7EEF7;border-radius:9999px;padding:6px 10px;margin-top:6px}
+.nvShLead{font-size:.84rem;color:#3E4C59;line-height:1.6;margin:4px 0 12px}
+.nvShLead b{color:#1A3A5C}
+.nvShFoot{position:sticky;bottom:-16px;background:#FFFFFF;display:flex;align-items:center;gap:10px;padding:12px 0 4px;border-top:1px solid #EDF1F5;margin-top:12px}
+.nvShFoot .nvShInfo{flex:1;font-size:.8rem;color:#616E7C}
+.nvBtn{min-height:48px;padding:0 16px;border-radius:12px;border:1px solid #E4E7EB;background:#FFFFFF;color:#1A3A5C;font-weight:700;font-size:.9rem;font-family:inherit;cursor:pointer}
+.nvBtn.nvPri{background:#1A3A5C;border-color:#1A3A5C;color:#F5F9FC}
+.nvBtn.nvPri:active{background:#2B5F8B}
+.nvBtn[disabled]{opacity:.45;cursor:default}
+.nvBtn:focus-visible,.nvSeg button:focus-visible,.nvChip:focus-visible,.nvShX:focus-visible,.nvOpt:focus-visible{outline:2px solid #2B5F8B;outline-offset:2px}
+.nvCkRow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #EDF1F5}
+.nvCkRow:first-child{border-top:0}
+.nvCkC{flex:1;min-width:0}
+.nvCkTxt{display:block;font-size:.92rem;font-weight:600;color:#1F2933;line-height:1.45;overflow-wrap:anywhere}
+.nvCkNew{display:inline-block;font-size:.7rem;font-weight:700;color:#214F86;background:#E7EEF7;border-radius:9999px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+.nvDots{display:inline-flex;gap:3px;margin-top:4px}
+.nvDots i{width:18px;height:18px;border-radius:9999px;font-style:normal;font-size:.64rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;background:#F2F4F6;color:#616E7C}
+.nvDots i.o{background:#EAF4EE;color:#256745}
+.nvDots i.x{background:#FBEAEA;color:#952626}
+.nvSeg{flex:none;display:inline-flex;border:1px solid #CBD2D9;border-radius:12px;overflow:hidden}
+.nvSeg button{min-width:64px;min-height:44px;border:0;background:#FFFFFF;color:#3E4C59;font-weight:700;font-size:.84rem;font-family:inherit;cursor:pointer}
+.nvSeg button+button{border-left:1px solid #CBD2D9}
+.nvSeg button[aria-pressed="true"][data-v="O"]{background:#EAF4EE;color:#256745}
+.nvSeg button[aria-pressed="true"][data-v="X"]{background:#FBEAEA;color:#952626}
+.nvCkAdd{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.nvTa,.nvIn{width:100%;box-sizing:border-box;border:1px solid #CBD2D9;border-radius:12px;padding:10px 12px;font-size:.9rem;font-family:inherit;color:#1F2933;background:#FFFFFF}
+.nvTa{min-height:96px;resize:vertical;line-height:1.55}
+.nvTa:focus,.nvIn:focus{outline:2px solid #2B5F8B;outline-offset:1px;border-color:#2B5F8B}
+.nvLbl{display:block;font-size:.8rem;font-weight:700;color:#3E4C59;margin:12px 0 6px}
+.nvChips2{display:flex;flex-wrap:wrap;gap:6px}
+.nvChip{min-height:40px;padding:0 12px;border-radius:9999px;border:1px solid #CBD2D9;background:#FFFFFF;color:#3E4C59;font-size:.84rem;font-weight:700;font-family:inherit;cursor:pointer}
+.nvChip[aria-pressed="true"]{background:#1A3A5C;border-color:#1A3A5C;color:#F5F9FC}
+.nvMsg{font-size:.82rem;line-height:1.55;border-radius:8px;padding:9px 11px;margin-top:10px;background:#E7EEF7;color:#214F86}
+.nvMsg.bad{background:#FBEAEA;color:#952626}
+.nvMsg.good{background:#EAF4EE;color:#256745}
+.nvResBig{display:flex;gap:8px;margin:6px 0 12px}
+.nvResBig div{flex:1;text-align:center;border:1px solid #E4E7EB;border-radius:12px;padding:12px 4px}
+.nvResBig b{display:block;font-size:1.5rem;color:#1A3A5C}
+.nvResBig span{font-size:.76rem;color:#616E7C;font-weight:700}
+.nvResBtns{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.nvLoopBar{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:0 0 12px}
+.nvLoopBar .nvLbT b{display:block;font-size:.98rem;color:#1A3A5C}
+.nvLoopBar .nvLbT span{display:block;font-size:.8rem;color:#616E7C;margin-top:3px;line-height:1.5}
+.nvLoopBar .nvLbBtns{display:flex;gap:8px;margin-top:10px}
+.nvLoopBar .nvLbBtns .nvBtn{flex:1}
+.nvShrink{height:10px;background:#EDF1F5;border-radius:9999px;overflow:hidden;margin:10px 0 6px}
+.nvShrink i{display:block;height:100%;background:#2B5F8B;border-radius:9999px}
+.nvDanHero{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:0 0 12px}
+.nvDanHero .nvDhBig{font-size:1.02rem;color:#1A3A5C;font-weight:800}
+.nvDanHero .nvDhSub{font-size:.8rem;color:#616E7C;line-height:1.55}
+.nvDanBtns{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.nvDanBtns .nvBtn{flex:1 1 150px}
+.nvDanSec{font-size:.86rem;font-weight:800;color:#1A3A5C;margin:16px 0 6px}
+.nvDanSec span{font-weight:600;color:#616E7C;font-size:.78rem;margin-left:6px}
+.nvDz{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:12px 14px;margin:0 0 8px}
+.nvDz.keep{border-color:#952626}
+.nvDzTop{display:flex;align-items:center;gap:8px;font-size:.76rem;font-weight:700;color:#616E7C}
+.nvDzTop .nvDzB{margin-left:auto;border-radius:9999px;padding:2px 8px;background:#F2F4F6;color:#3E4C59}
+.nvDz.keep .nvDzB{background:#FBEAEA;color:#952626}
+.nvDz.cand .nvDzB{background:#FAF3E0;color:#8C6719}
+.nvDz.gone .nvDzB{background:#EAF4EE;color:#256745}
+.nvDzC{font-size:.94rem;font-weight:700;color:#1F2933;margin:5px 0 2px;overflow-wrap:anywhere}
+.nvDzMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.76rem;color:#616E7C}
+.nvDzAct{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.nvDzAct label{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;color:#952626;min-height:36px}
+.nvDzAct .nvBtn{min-height:36px;font-size:.78rem;padding:0 10px}
+.nvDzNote{margin-top:8px;font-size:.8rem;padding:8px 10px}
+.nvOpt{display:block;width:100%;text-align:left;min-height:48px;margin:0 0 8px;padding:10px 12px;border-radius:12px;border:1px solid #CBD2D9;background:#FFFFFF;color:#1F2933;font-size:.9rem;font-family:inherit;line-height:1.5;cursor:pointer}
+.nvOpt b{color:#2B5F8B;margin-right:6px}
+.nvOpt.ok{border-color:#256745;background:#EAF4EE;color:#256745}
+.nvOpt.no{border-color:#952626;background:#FBEAEA;color:#952626}
+.nvOpt[disabled]{cursor:default}
+.nvQTag{font-size:.76rem;font-weight:700;color:#214F86;background:#E7EEF7;border-radius:9999px;padding:3px 9px;display:inline-block;margin-bottom:8px;max-width:100%;overflow-wrap:anywhere}
+.nvQ{font-size:.98rem;font-weight:700;color:#1F2933;line-height:1.6;margin:0 0 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.nvAcct{border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:16px 0 8px;background:#FFFFFF}
+.nvAcct h3{margin:0 0 4px;font-size:.92rem;color:#1A3A5C}
+.nvAcct p{margin:0 0 10px;font-size:.8rem;color:#616E7C;line-height:1.55}
+.nvGateCta{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:12px 0}
+.nvGateCta b{display:block;color:#1A3A5C;font-size:.94rem}
+.nvGateCta span{display:block;color:#616E7C;font-size:.8rem;margin:3px 0 10px;line-height:1.5}
+</style>
+<script>
+(function () {
+  'use strict';
+  if (window.nvLoop) { return; }
+  var root = document.documentElement;
+  var SUBJ_BASE = ['국어', '수학', '영어', '한국사', '사회탐구', '과학탐구', '통합사회', '통합과학'];
+  var SUBJ_OK = /^[가-힣A-Za-z0-9Ⅰ-Ⅹⅰ-ⅹ ·()_-]{1,20}$/;   /* 서버 nv_subject_ok 와 같은 규칙 */
+  var ICON_BOOK = '<svg viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20"/><path d="M9 7h7M9 11h5"/></svg>';
+
+  function kstDate(ms) { return new Date((ms == null ? Date.now() : ms) + 324e5).toISOString().slice(0, 10); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[c]; }); }
+  function user() { return (window.NB && window.NB.user) ? window.NB.user : null; }
+  function sbc() { return (window.NB && window.NB.sb) || window.SB || null; }
+  function st() { return window.state || {}; }
+  function say(m) { try { if (typeof window.toast === 'function') { window.toast(m); } } catch (e) { } }
+  function isStudent() { var s = st(); return !!(user() && sbc()) && !s.sampleMode && s.role !== 'parent' && s.role !== 'admin' && !s.adminFull; }
+  function mmdd(d) { var p = String(d || '').split('-'); return p.length === 3 ? (+p[1]) + '/' + (+p[2]) : String(d || ''); }
+  function fmtClock(s) { s = Math.max(0, Math.floor(s)); var m = Math.floor(s / 60), x = s % 60; return m + ':' + (x < 10 ? '0' : '') + x; }
+  function cut(s, n) { return Array.from(String(s || '').replace(/\s+/g, ' ').trim()).slice(0, n).join(''); }
+  function plain(s, n) { return cut(String(s || '').replace(/[<>"'`&\\]/g, ''), n); }
+  function curView() { var t = document.querySelector('.tab.on'); return LAST_K || (t ? t.dataset.k : ''); }
+  function errText(err, fallback) {
+    var m = String((err && (err.message || err.msg)) || '');
+    if (/student only/.test(m)) { return '학생 계정에서만 쓸 수 있어요.'; }
+    if (/too many/.test(m)) { return '오늘은 더 등록할 수 없어요. 내일 다시 해 주세요.'; }
+    if (/not due/.test(m)) { return '아직 이 회독 날짜가 아니에요.'; }
+    if (/concepts must/.test(m)) { return '개념은 1개 이상 30개 이하로 적어 주세요.'; }
+    if (/subject invalid/.test(m)) { return '과목 이름은 한글·영문·숫자로 20자 이내로 적어 주세요.'; }
+    if (/date out of range/.test(m)) { return '강의 날짜는 최근 14일 안에서 고를 수 있어요.'; }
+    if (/Failed to fetch|NetworkError|network/i.test(m)) { return '인터넷 연결을 확인하고 다시 시도해 주세요.'; }
+    return fallback || '잠시 후 다시 시도해 주세요.';
+  }
+  async function rpc(name, args) {
+    var c = sbc(); if (!c) { throw new Error('login required'); }
+    var r = await c.rpc(name, args || {});
+    if (r.error) { throw r.error; }
+    return r.data;
+  }
+
+  /* ── 데이터: 개념 카드 · 요약 · 회독→강의 매핑 ── */
+  var DAN = [], SUM = null, REV2SI = {}, SI_NAME = {}, LOADING = null, LAST_K = '';
+  function marksOf(d) { return Array.isArray(d.marks) ? d.marks : []; }
+  function kindOf(d) { if (d.status === 'cleared') { return 'gone'; } if (d.status === 'danwon') { return 'keep'; } return marksOf(d).length ? 'cand' : 'new'; }
+  function counts() { var c = { total: DAN.length, gone: 0, keep: 0, cand: 0, new: 0 }; DAN.forEach(function (d) { c[kindOf(d)]++; }); c.left = c.total - c.gone; return c; }
+  function syncStateDanwon() {
+    var s = st(); if (!s || !isStudent()) { return; }
+    s.danwon = DAN.map(function (d) { return { id: d.id, subj: d.subject, c: d.concept, hist: Array.isArray(d.review_history) ? d.review_history.slice() : [], note: d.note || '', fin: !!d.final_check, ai: d.ai_digest || null, status: d.status }; });
+  }
+  function loadLoop() {
+    if (!isStudent()) { DAN = []; SUM = null; return Promise.resolve(); }
+    if (LOADING) { return LOADING; }
+    var c = sbc(), uid = user().id;
+    LOADING = (async function () {
+      var r1 = await c.from('danwon_items').select('id,subject,concept,status,marks,review_history,note,final_check,ai_digest,study_item_id,source,created_at,updated_at,cleared_at').eq('student_id', uid).order('updated_at', { ascending: false }).limit(1000);
+      if (!r1.error && Array.isArray(r1.data)) { DAN = r1.data; }
+      var r2 = await c.rpc('app_core_summary');
+      if (!r2.error && r2.data) { SUM = r2.data; }
+      var r3 = await c.from('review_events').select('id,study_item_id,study_items(lecture_name,page_range)').eq('student_id', uid).limit(3000);
+      if (!r3.error && Array.isArray(r3.data)) {
+        REV2SI = {}; r3.data.forEach(function (x) { REV2SI[x.id] = x.study_item_id; if (x.study_items) { SI_NAME[x.study_item_id] = x.study_items.lecture_name || x.study_items.page_range || ''; } });
+      }
+      syncStateDanwon();
+    })().catch(function () { }).then(function () { LOADING = null; });
+    return LOADING;
+  }
+  function refreshAll() {
+    var jobs = [];
+    try { if (window.nbLoadReviews) { jobs.push(window.nbLoadReviews()); } } catch (e) { }
+    try { if (window.nbStats) { jobs.push(window.nbStats()); } } catch (e) { }
+    jobs.push(loadLoop());
+    return Promise.all(jobs.map(function (p) { return Promise.resolve(p).catch(function () { }); })).then(function () {
+      try { if (window.nvApp && window.nvApp.refresh) { window.nvApp.refresh(); } } catch (e) { }
+    });
+  }
+
+  /* ── 시트(전체 화면 대화상자) 공통 ── */
+  var lastFocus = null;
+  function sheet(id, label) {
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div'); el.id = id; el.className = 'nvSheet';
+      el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', label);
+      el.innerHTML = '<div class="nvShIn"></div>';
+      el.addEventListener('click', function (e) { if (e.target === el && !el.dataset.busy) { closeSheet(el); } });
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function openSheet(el) {
+    if (!el.classList.contains('on')) { lastFocus = document.activeElement; }
+    el.classList.add('on'); root.classList.add('nv-sheet-on');
+    setTimeout(function () { try { var f = el.querySelector('.nvShX') || el.querySelector('button,input,textarea'); if (f) { f.focus({ preventScroll: true }); } } catch (e) { } }, 30);
+  }
+  function closeSheet(el) {
+    if (!el) { return; }
+    el.classList.remove('on');
+    if (el.nvOnClose) { var f = el.nvOnClose; el.nvOnClose = null; try { f(); } catch (e) { } }
+    if (!document.querySelector('.nvSheet.on')) { root.classList.remove('nv-sheet-on'); }
+    try { if (lastFocus && document.contains(lastFocus)) { lastFocus.focus({ preventScroll: true }); } } catch (e) { }
+  }
+  document.addEventListener('keydown', function (e) {
+    var on = document.querySelectorAll('.nvSheet.on'); var top = on[on.length - 1]; if (!top) { return; }
+    if (e.key === 'Escape' || e.key === 'Esc') { if (!top.dataset.busy) { closeSheet(top); } return; }
+    if (e.key !== 'Tab') { return; }
+    /* 대화상자 안에서만 초점이 돌게 */
+    var f = Array.prototype.filter.call(top.querySelectorAll('button,input,textarea,select,a[href],summary,[tabindex]:not([tabindex="-1"])'), function (x) { return !x.disabled && x.offsetParent !== null; });
+    if (!f.length) { return; }
+    var first = f[0], last = f[f.length - 1];
+    if (!top.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  function inner(el) { return el.querySelector('.nvShIn'); }
+  function head(title, sub, extra) {
+    return '<div class="nvShHead"><div class="nvShT"><b>' + esc(title) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>' + (extra || '') + '<button type="button" class="nvShX" data-a="close" aria-label="닫기">✕</button></div>';
+  }
+  function dots(marks, si) {
+    var m = Array.isArray(marks) ? marks : [], out = '', o = 0, x2 = 0;
+    for (var i = 1; i <= 5; i++) {
+      var v = null; m.forEach(function (e) { if (e && e.k === 'r' && +e.r === i && (e.s == null || si == null || +e.s === +si)) { v = e.v; } });
+      if (v === 'O') { o++; } else if (v === 'X') { x2++; }
+      out += v === 'O' ? '<i class="o" title="' + i + '회독 알아요">✓</i>' : v === 'X' ? '<i class="x" title="' + i + '회독 몰라요">✗</i>' : '<i title="' + i + '회독 전">' + i + '</i>';
+    }
+    return '<span class="nvDots" role="img" aria-label="회독 기록 알아요 ' + o + '번, 몰라요 ' + x2 + '번">' + out + '</span>';
+  }
+
+  /* ── 회독 체크: 개념마다 알아요/몰라요 → 소거·단권화 ── */
+  var CK = null, ckTick = null;
+  var ckEl = sheet('nvCheck', '회독 체크');
+  function ckSec() { var s = st(), t = CK && s.timing ? s.timing['db' + CK.id] : null; return t ? Math.round((Date.now() - t) / 1000) : 0; }
+  async function openCheck(id, subjHint) {
+    var s = st(); s.timing = s.timing || {};
+    var ev = (s.dbRev || []).filter(function (r) { return r.id === id; })[0] || {};
+    if (s.timing['db' + id] == null) { s.timing['db' + id] = Date.now(); }
+    try { if (!window._tk && typeof updateTimers === 'function') { window._tk = setInterval(updateTimers, 1000); } } catch (e0) { }
+    ckEl.nvOnClose = function () { clearInterval(ckTick); if (window.go && (LAST_K === 'today' || LAST_K === 'dan')) { window.go(LAST_K); } };
+    clearInterval(ckTick); ckTick = setInterval(function () { var t = document.getElementById('nvCkTmr'); if (t && CK) { t.textContent = '복습 ' + fmtClock(ckSec()); } }, 1000);
+    if (CK && CK.id === id && CK.phase === 'check') { renderCheck(); openSheet(ckEl); return; }
+    CK = { id: id, subject: ev.subject || subjHint || '', round: ev.round || 1, rows: [], busy: false, phase: 'load', res: null };
+    renderCheck(); openSheet(ckEl);
+    await loadLoop();
+    if (!CK || CK.id !== id) { return; }
+    var si = REV2SI[id];
+    CK.lecture = SI_NAME[si] || ev.page_range || '';
+    CK.rows = DAN.filter(function (d) { return d.study_item_id === si && d.status !== 'cleared'; })
+      .sort(function (a, b) { return a.id - b.id; })
+      .map(function (d) { return { id: d.id, c: d.concept, v: null, marks: marksOf(d), si: d.study_item_id }; });
+    CK.phase = 'check'; renderCheck();
+  }
+  function renderCheck() {
+    var box = inner(ckEl); if (!CK) { box.innerHTML = ''; return; }
+    var title = (CK.subject || '복습') + ' · ' + CK.round + '회독';
+    if (CK.phase === 'load') { box.innerHTML = head(title, '개념을 불러오는 중…'); return; }
+    if (CK.phase === 'done') { renderCheckDone(); return; }
+    var n = CK.rows.length, marked = CK.rows.filter(function (r) { return r.v; }).length;
+    var list = CK.rows.map(function (r, i) {
+      return '<div class="nvCkRow"><div class="nvCkC"><span class="nvCkTxt">' + esc(r.c) + (r.isNew ? '<span class="nvCkNew">새 개념</span>' : '') + '</span>' + (r.isNew ? '' : dots(r.marks, r.si)) + '</div>'
+        + '<div class="nvSeg" role="group" aria-label="' + esc(r.c) + '"><button type="button" data-i="' + i + '" data-v="O" aria-pressed="' + (r.v === 'O') + '">알아요</button><button type="button" data-i="' + i + '" data-v="X" aria-pressed="' + (r.v === 'X') + '">몰라요</button></div></div>';
+    }).join('');
+    var lead = n
+      ? '개념마다 떠올려 보고 <b>알아요</b> 또는 <b>몰라요</b>를 누르세요. 다른 날 <b>두 번 연속 알아요</b>면 지워지고, 다섯 번 확인해도 남는 것이 <b>단권화</b>가 됩니다.'
+      : '이 강의에 적어 둔 개념이 없어요. 오늘 공부한 개념을 한 줄에 하나씩 적어 두면, 다음 회독부터 알아요/몰라요로 걸러서 모르는 것만 남겨 드려요.';
+    var canSubmit = !CK.busy && (n === 0 || marked === n);
+    box.innerHTML = head(title, CK.lecture, '<span class="nvShTmr" id="nvCkTmr">복습 ' + fmtClock(ckSec()) + '</span>')
+      + '<p class="nvShLead">' + lead + '</p>'
+      + '<div class="nvCkList">' + list + '</div>'
+      + '<div class="nvCkAdd"><label class="nvLbl" for="nvCkNewTa" style="margin:4px 0 0">개념 추가 (한 줄에 하나)</label><textarea id="nvCkNewTa" class="nvTa" maxlength="1800" placeholder="예) 등비수열의 수렴 조건&#10;무한급수의 합"></textarea><button type="button" class="nvBtn" data-a="add">목록에 추가</button></div>'
+      + (CK.err ? '<div class="nvMsg bad" role="alert">' + esc(CK.err) + '</div>' : '')
+      + '<div class="nvShFoot"><span class="nvShInfo">' + (n ? marked + ' / ' + n + ' 체크' : '개념 0개') + '</span><button type="button" class="nvBtn" data-a="later">나중에</button><button type="button" class="nvBtn nvPri" data-a="submit"' + (canSubmit ? '' : ' disabled') + '>' + (CK.busy ? '저장 중…' : (n ? CK.round + '회독 완료' : '개념 없이 완료')) + '</button></div>';
+  }
+  function renderCheckDone() {
+    var r = CK.res || {}, box = inner(ckEl);
+    var msg = r.cleared_now ? '이번 회독에서 ' + r.cleared_now + '개를 지웠어요. 다른 날 두 번 연속 알았던 개념이에요.' : (r.known ? '알아요는 다른 날 한 번 더 확인되면 지워져요.' : '');
+    box.innerHTML = head((CK.subject || '복습') + ' · ' + CK.round + '회독 완료', CK.lecture)
+      + '<div class="nvResBig"><div><b>' + (r.known || 0) + '</b><span>알아요</span></div><div><b>' + (r.unknown || 0) + '</b><span>몰라요</span></div><div><b>' + (r.cleared_now || 0) + '</b><span>이번에 지움</span></div></div>'
+      + '<p class="nvShLead">이 강의에서 남은 모르는 것 <b>' + (r.left_item || 0) + '개</b> · 전체 남은 것 ' + (r.left_total || 0) + '개 · 단권화 확정 ' + (r.danwon_total || 0) + '개</p>'
+      + (msg ? '<div class="nvMsg good">' + esc(msg) + '</div>' : '')
+      + '<div class="nvResBtns">' + ((r.left_total || 0) > 0 ? '<button type="button" class="nvBtn nvPri" data-a="drill">남은 것 약점 문제로 메우기</button>' : '')
+      + '<button type="button" class="nvBtn" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>';
+  }
+  ckEl.addEventListener('click', async function (e) {
+    var b = e.target.closest('button'); if (!b || !CK) { return; }
+    var a = b.dataset.a;
+    if (b.dataset.v && b.dataset.i != null) {
+      var row = CK.rows[+b.dataset.i]; if (!row || CK.busy) { return; }
+      row.v = row.v === b.dataset.v ? null : b.dataset.v; CK.err = '';
+      Array.prototype.forEach.call(b.parentNode.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(row.v === x.dataset.v)); });
+      var n = CK.rows.length, marked = CK.rows.filter(function (r) { return r.v; }).length;
+      var info = ckEl.querySelector('.nvShFoot .nvShInfo'), sub = ckEl.querySelector('[data-a="submit"]'), er = ckEl.querySelector('.nvMsg.bad');
+      if (info) { info.textContent = marked + ' / ' + n + ' 체크'; } if (sub) { sub.disabled = marked !== n; } if (er) { er.parentNode.removeChild(er); }
+      return;
+    }
+    if (a === 'close' || a === 'later') {
+      if (CK.busy) { return; }
+      var wasDone = CK.phase === 'done';
+      if (!wasDone) { say('복습 시간은 계속 재고 있어요. 오늘의 복습에서 이어서 체크하세요.'); }
+      CK = wasDone ? null : CK;
+      closeSheet(ckEl);
+      return;
+    }
+    if (a === 'add') {
+      var ta = document.getElementById('nvCkNewTa'); var lines = String(ta && ta.value || '').split(/\n+/).map(function (x) { return cut(x, 120); }).filter(Boolean);
+      var have = {}; CK.rows.forEach(function (r) { have[r.c.replace(/\s+/g, '').toLowerCase()] = 1; });
+      lines.forEach(function (c) { var k = c.replace(/\s+/g, '').toLowerCase(); if (!have[k] && CK.rows.length < 60) { have[k] = 1; CK.rows.push({ id: null, c: c, v: null, marks: [], isNew: true }); } });
+      renderCheck(); return;
+    }
+    if (a === 'submit') {
+      if (CK.busy) { return; }
+      var marks = CK.rows.filter(function (r) { return r.v; }).map(function (r) { return r.id ? { id: r.id, v: r.v } : { c: r.c, v: r.v }; });
+      CK.busy = true; ckEl.dataset.busy = '1'; renderCheck();
+      try {
+        var res = await rpc('app_review_check', { p_event: CK.id, p_marks: marks, p_duration: ckSec() });
+        var s = st(); if (s.timing) { delete s.timing['db' + CK.id]; }
+        try { if (window.addXp) { window.addXp(20); } if (window.addPts) { window.addPts(50); } } catch (e2) { }
+        CK.res = res || {}; CK.phase = 'done'; CK.busy = false; delete ckEl.dataset.busy; clearInterval(ckTick);
+        renderCheck(); refreshAll();
+      } catch (err) {
+        CK.busy = false; delete ckEl.dataset.busy; CK.err = errText(err, '저장하지 못했어요. 체크한 내용은 그대로 있으니 다시 눌러 주세요.'); renderCheck();
+      }
+      return;
+    }
+    if (a === 'drill') { ckEl.nvOnClose = null; clearInterval(ckTick); closeSheet(ckEl); CK = null; openDrill(); return; }
+    if (a === 'dan') { ckEl.nvOnClose = null; clearInterval(ckTick); closeSheet(ckEl); CK = null; if (window.go) { window.go('dan'); } return; }
+  });
+
+  /* ── 오늘 들은 강의 등록 → 5회독 일정 + 개념 카드 ── */
+  var LC = null, lcEl = sheet('nvLecture', '오늘 들은 강의 등록');
+  function subjectsAll() {
+    var seen = {}, out = [];
+    function add(x) { x = cut(x, 20); if (x && !seen[x] && SUBJ_OK.test(x)) { seen[x] = 1; out.push(x); } }
+    SUBJ_BASE.forEach(add); DAN.forEach(function (d) { add(d.subject); }); (st().dbRev || []).forEach(function (r) { add(r.subject); });
+    return out;
+  }
+  function openLecture() {
+    if (!isStudent()) { say('로그인한 학생 계정에서 쓸 수 있어요.'); return; }
+    lcEl.nvOnClose = null;
+    LC = { subject: LC && LC.subject || '', lecture: '', concepts: '', dayAgo: 0, busy: false, err: '', res: null };
+    renderLecture(); openSheet(lcEl);
+  }
+  function lcConcepts() { var seen = {}; return String(LC.concepts || '').split(/\n+/).map(function (x) { return cut(x, 120); }).filter(function (x) { var k = x.replace(/\s+/g, '').toLowerCase(); if (!x || seen[k]) { return false; } seen[k] = 1; return true; }); }
+  function renderLecture() {
+    var box = inner(lcEl);
+    if (LC.res) {
+      var d = LC.res.dates || [];
+      box.innerHTML = head('5회독 일정을 만들었어요', LC.subject + (LC.lecture ? ' · ' + LC.lecture : ''))
+        + '<p class="nvShLead">개념 <b>' + (LC.res.linked || 0) + '개</b>를 담았어요. 아래 날짜마다 알아요/몰라요로 걸러서 모르는 것만 남깁니다.</p>'
+        + ((LC.res.entered || 0) > (LC.res.linked || 0) ? '<div class="nvMsg">' + ((LC.res.entered || 0) - (LC.res.linked || 0)) + '개는 이미 다른 강의에 있는 개념이라 그 강의 일정에서 함께 복습해요.</div>' : '')
+        + '<div class="nvChips2" aria-label="회독 날짜">' + d.map(function (x, i) { return '<span class="nvChip" style="display:inline-flex;align-items:center;cursor:default">' + (i + 1) + '회독 ' + mmdd(x) + '</span>'; }).join('') + '</div>'
+        + '<div class="nvResBtns">' + (LC.res.round1 ? '<button type="button" class="nvBtn nvPri" data-a="r1">지금 1회독 체크하기</button>' : '') + '<button type="button" class="nvBtn" data-a="close">닫기</button></div>';
+      return;
+    }
+    var subs = subjectsAll(), cs = lcConcepts();
+    var ok = !LC.busy && LC.subject && cs.length >= 1 && cs.length <= 30;
+    box.innerHTML = head('오늘 들은 강의 등록', '배운 개념을 적어 두면 1·3·7·11·15일에 다시 불러와 걸러 줍니다')
+      + '<span class="nvLbl" id="nvLcSubL">과목</span><div class="nvChips2" role="group" aria-labelledby="nvLcSubL">' + subs.map(function (x) { return '<button type="button" class="nvChip" data-s="' + esc(x) + '" aria-pressed="' + (x === LC.subject) + '">' + esc(x) + '</button>'; }).join('') + '</div>'
+      + '<label class="nvLbl" for="nvLcLec">강의·범위</label><input id="nvLcLec" class="nvIn" maxlength="80" placeholder="예) 수1 12강 등비수열 / 수특 p.40~52" value="' + esc(LC.lecture) + '">'
+      + '<label class="nvLbl" for="nvLcCon">배운 개념 (한 줄에 하나 · 최대 30개)</label><textarea id="nvLcCon" class="nvTa" maxlength="3600" placeholder="예) 등비수열의 일반항&#10;등비수열의 합 공식&#10;등비수열의 수렴 조건">' + esc(LC.concepts) + '</textarea>'
+      + '<span class="nvLbl" id="nvLcDayL">강의 날짜</span><div class="nvChips2" role="group" aria-labelledby="nvLcDayL">' + ['오늘', '어제', '그저께'].map(function (x, i) { return '<button type="button" class="nvChip" data-d="' + i + '" aria-pressed="' + (i === LC.dayAgo) + '">' + x + '</button>'; }).join('') + '</div>'
+      + (LC.err ? '<div class="nvMsg bad" role="alert">' + esc(LC.err) + '</div>' : '')
+      + '<div class="nvShFoot"><span class="nvShInfo" id="nvLcCnt">개념 ' + cs.length + '개' + (cs.length > 30 ? ' (30개까지)' : '') + '</span><button type="button" class="nvBtn nvPri" data-a="save"' + (ok ? '' : ' disabled') + '>' + (LC.busy ? '만드는 중…' : '5회독 일정 만들기') + '</button></div>';
+  }
+  lcEl.addEventListener('input', function (e) {
+    if (!LC || LC.res) { return; }
+    if (e.target.id === 'nvLcLec') { LC.lecture = e.target.value; }
+    if (e.target.id === 'nvLcCon') { LC.concepts = e.target.value; }
+    var cs = lcConcepts(), cnt = document.getElementById('nvLcCnt'), btn = lcEl.querySelector('[data-a="save"]');
+    if (cnt) { cnt.textContent = '개념 ' + cs.length + '개' + (cs.length > 30 ? ' (30개까지)' : ''); }
+    if (btn) { btn.disabled = !(!LC.busy && LC.subject && cs.length >= 1 && cs.length <= 30); }
+  });
+  lcEl.addEventListener('click', async function (e) {
+    var b = e.target.closest('button'); if (!b || !LC) { return; }
+    if (b.dataset.s) { LC.subject = b.dataset.s; LC.err = ''; renderLecture(); return; }
+    if (b.dataset.d != null) { LC.dayAgo = +b.dataset.d; renderLecture(); return; }
+    var a = b.dataset.a;
+    if (a === 'close') { if (LC.busy) { return; } closeSheet(lcEl); return; }
+    if (a === 'r1') { var ev = LC.res.round1; lcEl.nvOnClose = null; closeSheet(lcEl); if (window.go) { window.go('today'); } openCheck(ev, LC.subject); return; }
+    if (a === 'save') {
+      if (LC.busy) { return; }
+      var cs = lcConcepts(); if (!LC.subject || !cs.length) { return; }
+      LC.busy = true; lcEl.dataset.busy = '1'; LC.err = ''; renderLecture();
+      try {
+        var day = kstDate(Date.now() - LC.dayAgo * 864e5);
+        var res = await rpc('app_add_lecture', { p_subject: LC.subject, p_lecture: cut(LC.lecture, 80), p_concepts: cs, p_date: day });
+        LC.res = res || {}; LC.res.entered = cs.length;
+        lcEl.nvOnClose = function () { if (window.go && (LAST_K === 'today' || LAST_K === 'dan' || LAST_K === 'cal')) { window.go(LAST_K); } };
+        try { var r1 = await sbc().from('review_events').select('id,scheduled_date').eq('study_item_id', LC.res.study_item_id).eq('round', 1).maybeSingle(); if (r1 && r1.data && r1.data.scheduled_date <= kstDate()) { LC.res.round1 = r1.data.id; } } catch (e3) { }
+        try { if (window.addXp) { window.addXp(10); } } catch (e4) { }
+        await refreshAll();
+      } catch (err) { LC.err = errText(err, '등록하지 못했어요. 다시 시도해 주세요.'); }
+      LC.busy = false; delete lcEl.dataset.busy; renderLecture();
+    }
+  });
+
+  /* ── 모르는 개념 직접 추가 ── */
+  var MA = null, maEl = sheet('nvManual', '모르는 개념 추가');
+  function openManual() {
+    if (!isStudent()) { say('로그인한 학생 계정에서 쓸 수 있어요.'); return; }
+    MA = { subject: MA && MA.subject || '', concept: '', busy: false, err: '', ok: '' }; renderManual(); openSheet(maEl);
+    maEl.nvOnClose = function () { if (MA && MA.added && window.go && LAST_K === 'dan') { window.go('dan'); } };
+  }
+  function renderManual() {
+    var subs = subjectsAll(), ok = !MA.busy && MA.subject && cut(MA.concept, 120);
+    inner(maEl).innerHTML = head('모르는 개념 추가', '문제집·모의고사에서 막힌 개념을 단권화 후보로 담아요')
+      + '<span class="nvLbl" id="nvMaSubL">과목</span><div class="nvChips2" role="group" aria-labelledby="nvMaSubL">' + subs.map(function (x) { return '<button type="button" class="nvChip" data-s="' + esc(x) + '" aria-pressed="' + (x === MA.subject) + '">' + esc(x) + '</button>'; }).join('') + '</div>'
+      + '<label class="nvLbl" for="nvMaIn">개념 (출처까지 적으면 좋아요)</label><input id="nvMaIn" class="nvIn" maxlength="120" placeholder="예) 가정법 과거완료 도치 — 수특 영어 p.126" value="' + esc(MA.concept) + '">'
+      + (MA.err ? '<div class="nvMsg bad" role="alert">' + esc(MA.err) + '</div>' : '') + (MA.ok ? '<div class="nvMsg good" role="status">' + esc(MA.ok) + '</div>' : '')
+      + '<div class="nvShFoot"><span class="nvShInfo"></span><button type="button" class="nvBtn nvPri" data-a="save"' + (ok ? '' : ' disabled') + '>' + (MA.busy ? '담는 중…' : '단권화 후보에 담기') + '</button></div>';
+  }
+  maEl.addEventListener('input', function (e) { if (MA && e.target.id === 'nvMaIn') { MA.concept = e.target.value; var btn = maEl.querySelector('[data-a="save"]'); if (btn) { btn.disabled = !(!MA.busy && MA.subject && cut(MA.concept, 120)); } } });
+  maEl.addEventListener('click', async function (e) {
+    var b = e.target.closest('button'); if (!b || !MA) { return; }
+    if (b.dataset.s) { MA.subject = b.dataset.s; MA.err = ''; renderManual(); return; }
+    if (b.dataset.a === 'close') { if (!MA.busy) { closeSheet(maEl); } return; }
+    if (b.dataset.a === 'save') {
+      MA.busy = true; maEl.dataset.busy = '1'; MA.err = ''; MA.ok = ''; renderManual();
+      try { await rpc('app_dan_add', { p_subject: MA.subject, p_concept: cut(MA.concept, 120), p_source: 'manual' }); MA.ok = '담았어요. 약점 문제를 다른 날 두 번 연속 맞히면 지워져요.'; MA.concept = ''; MA.added = true; await loadLoop(); }
+      catch (err) { MA.err = errText(err, '담지 못했어요. 다시 시도해 주세요.'); }
+      MA.busy = false; delete maEl.dataset.busy; renderManual();
+    }
+  });
+
+  /* ── 약점 문제: 남은 모르는 개념만 문제로 ── */
+  var DR = null, drEl = sheet('nvDrill', '약점 문제');
+  async function openDrill(subject) {
+    if (!isStudent()) { say('로그인한 학생 계정에서 쓸 수 있어요.'); return; }
+    DR = { qs: [], i: 0, right: 0, done: 0, cleared: 0, left: null, leftToday: null, phase: 'load', err: '', ans: null, busy: false, subject: subject || null };
+    renderDrill(); openSheet(drEl); fetchDrill();
+  }
+  async function fetchDrill() {
+    DR.phase = 'load'; DR.err = ''; renderDrill();
+    try {
+      var r = await sbc().functions.invoke('weak-drill', { body: { count: 5, subject: DR.subject } });
+      var d = r.data;
+      if (r.error) {
+        var code = 0; try { code = r.error.context && r.error.context.status; } catch (e0) { }
+        DR.phase = 'err'; DR.err = code === 401 ? '로그인이 풀렸어요. 다시 로그인해 주세요.' : code === 429 ? '지금 문제를 만드는 사람이 많아요. 잠시 후 다시 시도해 주세요.' : '문제를 만들지 못했어요. 잠시 후 다시 시도해 주세요.';
+        renderDrill(); return;
+      }
+      DR.leftToday = d && d.left_today != null ? d.left_today : null;
+      if (d && d.cap) { DR.phase = 'cap'; DR.attemptCap = !!d.attempt_cap; renderDrill(); return; }
+      if (d && d.empty) { DR.phase = 'empty'; renderDrill(); return; }
+      DR.qs = (d && d.questions) || []; DR.i = 0; DR.ans = null;
+      DR.phase = DR.qs.length ? 'q' : 'empty'; renderDrill();
+    } catch (err) { DR.phase = 'err'; DR.err = errText(err, '문제를 만들지 못했어요. 잠시 후 다시 시도해 주세요.'); renderDrill(); }
+  }
+  function renderDrill() {
+    var box = inner(drEl);
+    if (DR.phase === 'load') { box.innerHTML = head('약점 문제', '남은 모르는 개념으로 문제를 만드는 중…') + '<p class="nvShLead">5회독 뒤에도 남은 개념만 골라 4지선다로 만들어요. 보통 20초 안팎, 길면 1분쯤 걸려요.</p>'; return; }
+    if (DR.phase === 'err') { box.innerHTML = head('약점 문제', '') + '<div class="nvMsg bad" role="alert">' + esc(DR.err) + '</div><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="retry">다시 시도</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'cap' && DR.attemptCap) { box.innerHTML = head('오늘은 문제를 더 만들 수 없어요', '') + '<p class="nvShLead">오늘 만들 수 있는 횟수를 다 썼어요. 내일 남은 개념으로 다시 만들어 드려요. 그동안 단권화를 읽고 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'cap') { box.innerHTML = head('오늘 약점 문제를 다 풀었어요', '하루 10문항') + '<p class="nvShLead">내일 남은 개념으로 새로 만들어 드려요. 오늘은 단권화를 다시 읽고, 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'empty') { box.innerHTML = head('남은 모르는 개념이 없어요', '') + '<p class="nvShLead">오늘 들은 강의를 등록하고 회독 체크를 하면, 모르는 것만 남아 여기서 문제로 메울 수 있어요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="lec">오늘 들은 강의 등록</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'end') {
+      box.innerHTML = head('약점 문제 결과', '')
+        + '<div class="nvResBig"><div><b>' + DR.right + '/' + DR.done + '</b><span>정답</span></div><div><b>' + DR.cleared + '</b><span>이번에 지움</span></div><div><b>' + (DR.left == null ? '-' : DR.left) + '</b><span>남은 것</span></div></div>'
+        + '<p class="nvShLead">맞힌 개념은 다른 날 한 번 더 맞히면 단권화에서 지워져요. 틀린 개념은 단권화에 남겨 두고 다시 문제로 나와요.</p>'
+        + '<div class="nvResBtns">' + (DR.leftToday !== 0 ? '<button type="button" class="nvBtn nvPri" data-a="more">더 풀기</button>' : '') + '<button type="button" class="nvBtn" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>';
+      return;
+    }
+    var q = DR.qs[DR.i]; if (!q) { DR.phase = 'end'; renderDrill(); return; }
+    var opts = Array.isArray(q.options) ? q.options : [];
+    var A = DR.ans;
+    box.innerHTML = head('약점 문제 ' + (DR.i + 1) + ' / ' + DR.qs.length, '')
+      + '<span class="nvQTag">' + esc(q.subject) + ' · ' + esc(q.concept) + '</span>'
+      + '<p class="nvQ">' + esc(q.question) + '</p>'
+      + opts.map(function (o, k) {
+        var cls = A ? (k === A.answer ? ' ok' : (k === A.sel && !A.correct ? ' no' : '')) : '';
+        return '<button type="button" class="nvOpt' + cls + '" data-o="' + k + '"' + (A || DR.busy ? ' disabled' : '') + '><b>' + (k + 1) + '</b>' + esc(o) + (A && k === A.answer ? ' (정답)' : '') + (A && k === A.sel && !A.correct ? ' (내 답)' : '') + '</button>';
+      }).join('')
+      + (A ? '<div class="nvMsg ' + (A.correct ? 'good' : 'bad') + '" role="status">' + (A.correct ? '정답이에요. ' : '틀렸어요. ') + esc(A.explanation || '') + (A.status === 'cleared' ? ' 이 개념은 이제 단권화에서 지웠어요.' : A.correct ? ' 다른 날 한 번 더 맞히면 지워져요.' : ' 단권화에 남겨 둘게요.') + '</div>'
+        + '<div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="next">' + (DR.i + 1 < DR.qs.length ? '다음 문제' : '결과 보기') + '</button></div>' : '')
+      + (DR.err ? '<div class="nvMsg bad" role="alert">' + esc(DR.err) + '</div>' : '');
+  }
+  drEl.addEventListener('click', async function (e) {
+    var b = e.target.closest('button'); if (!b || !DR) { return; }
+    var a = b.dataset.a;
+    if (b.dataset.o != null && !DR.ans && !DR.busy) {
+      var q = DR.qs[DR.i], sel = +b.dataset.o;
+      DR.busy = true; drEl.dataset.busy = '1'; DR.err = ''; renderDrill();
+      try {
+        var r = await rpc('app_drill_answer', { p_q: q.id, p_selected: sel });
+        DR.ans = { sel: sel, answer: r.answer, correct: !!r.correct, explanation: r.explanation, status: r.status };
+        if (!r.repeat) { DR.done++; if (r.correct) { DR.right++; } if (r.status === 'cleared') { DR.cleared++; } }
+        if (r.left_total != null) { DR.left = r.left_total; }
+        try { if (window.addXp) { window.addXp(r.correct ? 15 : 5); } } catch (e5) { }
+      } catch (err) { DR.err = errText(err, '채점하지 못했어요. 다시 눌러 주세요.'); }
+      DR.busy = false; delete drEl.dataset.busy; renderDrill(); return;
+    }
+    if (a === 'next') { DR.i++; DR.ans = null; if (DR.i >= DR.qs.length) { DR.phase = 'end'; loadLoop(); } renderDrill(); return; }
+    if (a === 'more' || a === 'retry') { fetchDrill(); return; }
+    if (a === 'lec') { closeSheet(drEl); openLecture(); return; }
+    if (a === 'dan') { closeSheet(drEl); refreshAll(); if (window.go) { window.go('dan'); } return; }
+    if (a === 'close') { if (DR.busy) { return; } closeSheet(drEl); refreshAll(); if (window.go && (curView() === 'dan' || curView() === 'quiz' || curView() === 'today')) { window.go(curView()); } return; }
+  });
+
+  /* ── 단권화 화면(로그인 학생): 처음 → 지금 남은 것이 줄어드는 모습 + 확정/후보/확인 전/지운 것 ── */
+  var danFilter = '';
+  function danHtml() {
+    var c = counts(), pct = c.total ? Math.round(c.gone / c.total * 100) : 0;
+    var subs = {}; DAN.forEach(function (d) { subs[d.subject] = (subs[d.subject] || 0) + (d.status === 'cleared' ? 0 : 1); });
+    var list = DAN.filter(function (d) { return !danFilter || d.subject === danFilter; });
+    function sec(k, title, note) {
+      var items = list.filter(function (d) { return kindOf(d) === k; }); if (!items.length) { return ''; }
+      var body = items.map(function (d) {
+        var m = marksOf(d), qn = m.filter(function (x) { return x && x.k === 'q'; }), qo = qn.filter(function (x) { return x.v === 'O'; }).length;
+        var label = { keep: '단권화 확정', cand: '후보', 'new': '확인 전', gone: '지움' }[k];
+        var src = { lecture: '강의', review: '회독 중 추가', quiz: '퀴즈 오답', manual: '직접 추가' }[d.source] || '';
+        return '<div class="nvDz ' + k + '"><div class="nvDzTop"><span>' + esc(d.subject) + (src ? ' · ' + src : '') + '</span><span class="nvDzB">' + label + '</span></div>'
+          + '<div class="nvDzC">' + esc(d.concept) + '</div>'
+          + '<div class="nvDzMeta">' + dots(m, d.study_item_id) + (qn.length ? '<span>약점 문제 ' + qo + '/' + qn.length + ' 정답</span>' : '') + '</div>'
+          + (k === 'gone' ? '' : '<input class="nvIn nvDzNote" data-note="' + d.id + '" maxlength="120" placeholder="왜 몰랐나 · 핵심 한 줄로 압축" value="' + esc(d.note || '') + '" aria-label="' + esc(d.concept) + ' 메모">')
+          + '<div class="nvDzAct">' + (k === 'keep' ? '<label><input type="checkbox" data-fin="' + d.id + '"' + (d.final_check ? ' checked' : '') + '> 시험 전 최종 확인</label>' : '')
+          + (window.ntAsk ? '<button type="button" class="nvBtn" data-ask="' + d.id + '">개념 물어보기</button>' : '') + '</div></div>';
+      }).join('');
+      if (k === 'gone') { return '<details><summary class="nvDanSec" style="cursor:pointer">' + title + '<span>' + items.length + '개 · ' + note + '</span></summary>' + body + '</details>'; }
+      return '<div class="nvDanSec">' + title + '<span>' + items.length + '개 · ' + note + '</span></div>' + body;
+    }
+    var trend = (SUM && Array.isArray(SUM.trend) ? SUM.trend : []).slice(-6).map(function (t) { return mmdd(kstDate(Date.parse(t.done_at))) + ' ' + esc(t.subject) + ' ' + t.round + '회독 몰라요 ' + t.unknown; }).join(' → ');
+    var hero = c.total
+      ? '<div class="nvDanHero"><div class="nvDhBig">처음 ' + c.total + '개 → 지금 남은 것 ' + c.left + '개</div>'
+        + '<div class="nvShrink" role="progressbar" aria-label="지운 비율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i style="width:' + pct + '%"></i></div>'
+        + '<div class="nvDhSub">지움 ' + c.gone + ' · 단권화 확정 ' + c.keep + ' · 후보 ' + c.cand + ' · 확인 전 ' + c['new'] + (trend ? '<br>최근 회독: ' + trend : '') + '</div></div>'
+      : '<div class="nvDanHero"><div class="nvDhBig">아직 등록한 개념이 없어요</div><div class="nvDhSub">오늘 들은 강의와 배운 개념을 등록하면 5회독 일정이 잡히고, 회독마다 모르는 것만 남아 여기가 단권화가 됩니다.</div></div>';
+    var chips = Object.keys(subs).length > 1 ? '<div class="nvChips2" role="group" aria-label="과목 거르기" style="margin:0 0 8px"><button type="button" class="nvChip" data-f="" aria-pressed="' + (!danFilter) + '">전체</button>' + Object.keys(subs).map(function (s) { return '<button type="button" class="nvChip" data-f="' + esc(s) + '" aria-pressed="' + (danFilter === s) + '">' + esc(s) + ' ' + subs[s] + '</button>'; }).join('') + '</div>' : '';
+    return '<h2 class="sec">단권화 <span class="auto">5회독 소거법</span></h2>'
+      + '<p class="subtle">회독마다 개념을 <b>알아요 / 몰라요</b>로 거릅니다. 다른 날 <b>두 번 연속 알아요</b>면 지우고, 다섯 번 확인해도 남은 것이 <b>단권화</b>입니다. 남은 것은 약점 문제로 계속 메웁니다.</p>'
+      + hero
+      + '<div class="nvDanBtns">' + (c.left ? '<button type="button" class="nvBtn nvPri" data-a="drill">약점 문제 풀기</button>' : '') + '<button type="button" class="nvBtn" data-a="lec">오늘 들은 강의 등록</button><button type="button" class="nvBtn" data-a="manual">모르는 개념 추가</button>'
+      + (c.keep ? '<button type="button" class="nvBtn" data-a="build">단권화 AI 압축 (' + c.keep + ')</button><button type="button" class="nvBtn" data-a="exam">시험장 한 권 보기</button>' : '') + '</div>'
+      + chips
+      + sec('keep', '단권화 확정', '다섯 번 확인해도 남은 것')
+      + sec('cand', '후보', '아직 몰라요가 남은 것')
+      + sec('new', '확인 전', '다음 회독에서 처음 확인')
+      + sec('gone', '지운 것', '다른 날 두 번 연속 알았던 것');
+  }
+  function renderDanInto(panel) { if (panel) { panel.innerHTML = danHtml(); panel.dataset.nvDan = '1'; } }
+  function danPanel() { var v = document.getElementById('view'); var p = v && v.querySelector('[data-nv-dan="1"]'); return p || null; }
+  document.addEventListener('click', function (e) {
+    var p = danPanel(); if (!p || !p.contains(e.target)) { return; }
+    var b = e.target.closest('button'); if (!b) { return; }
+    if (b.dataset.f != null) { danFilter = b.dataset.f; renderDanInto(p); return; }
+    if (b.dataset.ask) { var d = DAN.filter(function (x) { return String(x.id) === b.dataset.ask; })[0]; if (d && window.ntAsk) { window.ntAsk(d.subject + ' — \'' + String(d.concept).replace(/["<>]/g, '') + '\' 개념을 처음부터 단계적으로 설명해줘'); } return; }
+    var a = b.dataset.a;
+    if (a === 'drill') { openDrill(danFilter || null); } else if (a === 'lec') { openLecture(); } else if (a === 'manual') { openManual(); }
+    else if (a === 'build' && window.danBuild) { window.danBuild(); } else if (a === 'exam' && window.danExam) { window.danExam(); }
+  });
+  document.addEventListener('change', function (e) {
+    var p = danPanel(); if (!p || !p.contains(e.target) || !sbc()) { return; }
+    var t = e.target;
+    if (t.dataset.note) { var id = +t.dataset.note, v = plain(t.value, 120); if (v !== t.value) { t.value = v; } sbc().from('danwon_items').update({ note: v || null }).eq('id', id).then(function (r) { if (!r.error) { DAN.forEach(function (d) { if (d.id === id) { d.note = v; } }); syncStateDanwon(); say('메모를 저장했어요'); } }); }
+    if (t.dataset.fin) { var id2 = +t.dataset.fin, on = !!t.checked; sbc().from('danwon_items').update({ final_check: on }).eq('id', id2).then(function (r) { if (!r.error) { DAN.forEach(function (d) { if (d.id === id2) { d.final_check = on; } }); syncStateDanwon(); } }); }
+  });
+  function wrapDan() {
+    if (typeof window.Dan !== 'function') { return false; }
+    if (window.Dan.__nvLoop) { return true; }
+    var orig = window.Dan;
+    var w = function () {
+      if (!isStudent()) { return orig.apply(this, arguments); }
+      var p = document.createElement('div'); p.className = 'panel'; renderDanInto(p);
+      loadLoop().then(function () { var q = danPanel(); if (q) { renderDanInto(q); } });
+      return p;
+    };
+    w.__nvLoop = true; window.Dan = w; return true;
+  }
+  /* AI 압축·시험장 한 권: 확정 = status 'danwon' */
+  function keepList() { return (st().danwon || []).filter(function (d) { return d.status === 'danwon'; }); }
+  /* 시험장 한 권은 새 창에 HTML 로 쓰이므로 태그·따옴표 문자를 뺀 사본을 넘긴다 */
+  function safeKeep(keep) {
+    return keep.map(function (d) {
+      var a = d.ai ? { core: plain(d.ai.core, 200), trap: plain(d.ai.trap, 200), key: plain(d.ai.key, 160) } : null;
+      return { id: d.id, subj: plain(d.subj, 20), c: plain(d.c, 120), note: plain(d.note, 120), fin: !!d.fin, ai: a, hist: (d.hist || []).slice(), status: d.status };
+    });
+  }
+  function wrapDanTools() {
+    if (typeof window.danBuild !== 'function' || window.danBuild.__nvLoop) { return !!(window.danBuild && window.danBuild.__nvLoop); }
+    var ob = window.danBuild, oe = window.danExam;
+    var wb = async function () {
+      if (!isStudent()) { if (!user()) { say('로그인하면 내 단권화를 AI로 압축해 드려요.'); return; } return ob.apply(this, arguments); }
+      var keep = keepList(); if (!keep.length) { say('아직 단권화 확정 개념이 없어요. 다섯 번 확인해도 남은 것이 여기에 모여요.'); return; }
+      var w = window.open('', '_blank');
+      if (w) { w.document.write('<html><head><meta charset="UTF-8"><title>단권화 만드는 중</title></head><body style="font-family:Pretendard,Malgun Gothic,sans-serif;padding:44px;color:#1A3A5C"><h2>단권화를 만드는 중…</h2><p style="color:#616E7C;line-height:1.7">다섯 번 확인해도 남은 것만 핵심으로 압축하고 있어요. 약 10초 뒤 이 창에 열립니다.</p></body></html>'); }
+      say('단권화를 만드는 중이에요');
+      try {
+        var rr = await sbc().functions.invoke('danwon-digest', { body: { items: keep.map(function (d) { return { subject: d.subj, concept: d.c, note: d.note || '' }; }) } });
+        var j = rr.data, code = 0; try { code = rr.error && rr.error.context && rr.error.context.status; } catch (e0) { }
+        if (!rr.error && j && Array.isArray(j.digests) && j.digests.length) {
+          j.digests.forEach(function (g) { var d = keep[g.i]; if (d) { d.ai = { core: plain(g.core, 200), trap: plain(g.trap, 200), key: plain(g.key, 160) }; sbc().from('danwon_items').update({ ai_digest: d.ai }).eq('id', d.id).then(function () { }); } });
+          say('단권화를 만들었어요'); if (w && window.danExamWrite) { window.danExamWrite(w, safeKeep(keep)); } loadLoop().then(function () { if (window.go && curView() === 'dan') { window.go('dan'); } });
+        } else { if (w) { w.close(); } say(code === 429 ? '오늘 AI 압축 횟수를 다 썼어요. 내일 다시 해 주세요.' : 'AI 압축에 실패했어요. 잠시 후 다시 시도해 주세요.'); }
+      } catch (e) { if (w) { w.close(); } say('네트워크 오류예요. 다시 시도해 주세요.'); }
+    };
+    var we = function () {
+      if (!isStudent()) { return oe.apply(this, arguments); }
+      var keep = keepList(); if (!keep.length) { say('단권화 확정 개념이 없어요.'); return; }
+      var w = window.open('', '_blank'); if (!w) { say('팝업을 허용해 주세요'); return; } if (window.danExamWrite) { window.danExamWrite(w, safeKeep(keep)); }
+    };
+    wb.__nvLoop = true; we.__nvLoop = true; window.danBuild = wb; window.danExam = we; return true;
+  }
+
+  /* ── 오늘의 복습: 개념 체크로 연결 ── */
+  function wrapRev() {
+    if (typeof window.doRevDB !== 'function') { return false; }
+    if (window.doRevDB.__nvLoop) { return true; }
+    var orig = window.doRevDB;
+    var w = function (id, subj) { if (!isStudent()) { return orig.apply(this, arguments); } openCheck(id, subj); };
+    w.__nvLoop = true; window.doRevDB = w; return true;
+  }
+  /* ── 퀴즈 오답 → 단권화 후보 ── */
+  var quizSeen = {};
+  function quizMiss(subject, text) {
+    if (!isStudent() || !subject || !text) { return; }
+    var k = subject + '|' + text; if (quizSeen[k] && Date.now() - quizSeen[k] < 60000) { return; } quizSeen[k] = Date.now();
+    var c = cut(String(text).replace(/^\s*(\d+[.)]|Q\d*[.)]?)\s*/, ''), 80);
+    rpc('app_dan_add', { p_subject: subject, p_concept: c, p_source: 'quiz' }).then(function () { loadLoop(); say('틀린 문제를 단권화 후보에 담았어요'); }, function () { });
+  }
+  function wrapQuiz() {
+    var ok = true;
+    try {
+      if (typeof window.ans === 'function' && !window.ans.__nvLoop) {
+        var oa = window.ans;
+        var wa = function (i) { var info = null; try { var q = QUIZ[quizSubj][qi]; var first = document.querySelector('.opt'); if (!first || first.style.pointerEvents !== 'none') { info = { s: quizSubj, ok: i === q.a, t: q.q }; } } catch (e) { } var r = oa.apply(this, arguments); if (info && !info.ok) { quizMiss(info.s, info.t); } return r; };
+        wa.__nvLoop = true; window.ans = wa;
+      }
+      if (typeof window.ansShort === 'function' && !window.ansShort.__nvLoop) {
+        var os = window.ansShort;
+        var ws = function () { var info = null; try { var q = QUIZ[quizSubj][qi]; var inp = document.getElementById('saInput'); var norm = function (v) { return (v || '').toString().replace(/[\s,을를]/g, '').toLowerCase(); }; if (inp && inp.style.pointerEvents !== 'none') { info = { s: quizSubj, ok: norm(inp.value) === norm(q.ans), t: q.q }; } } catch (e) { } var r = os.apply(this, arguments); if (info && !info.ok) { quizMiss(info.s, info.t); } return r; };
+        ws.__nvLoop = true; window.ansShort = ws;
+      }
+    } catch (e) { ok = false; }
+    return ok && !!(window.ans && window.ans.__nvLoop);
+  }
+
+  /* ── 화면별 주입: 오늘(루프 막대·개념 수) · 퀴즈(약점 문제) · 잠김 화면(강의부터 시작) · 나(계정 삭제) ── */
+  function loopBarHtml() {
+    var c = counts();
+    if (!c.total) {
+      return '<div class="nvLbT"><b>오늘 들은 강의를 등록해 보세요</b><span>배운 개념을 적어 두면 5회독 동안 아는 것은 지우고 모르는 것만 남겨 단권화해 드려요.</span></div>'
+        + '<div class="nvLbBtns"><button type="button" class="nvBtn nvPri" data-a="lec">오늘 들은 강의 등록</button></div>';
+    }
+    return '<div class="nvLbT"><b>모르는 것 ' + c.left + '개 남음</b><span>처음 ' + c.total + '개 중 ' + c.gone + '개 지움 · 단권화 확정 ' + c.keep + '개</span></div>'
+      + '<div class="nvShrink" aria-hidden="true"><i style="width:' + (c.total ? Math.round(c.gone / c.total * 100) : 0) + '%"></i></div>'
+      + '<div class="nvLbBtns"><button type="button" class="nvBtn" data-a="lec">강의 등록</button>' + (c.left ? '<button type="button" class="nvBtn nvPri" data-a="drill">약점 문제</button>' : '<button type="button" class="nvBtn" data-a="dan">단권화</button>') + '</div>';
+  }
+  function onLoopBar(e) { var b = e.target.closest('button'); if (!b) { return; } var a = b.dataset.a; if (a === 'lec') { openLecture(); } else if (a === 'drill') { openDrill(); } else if (a === 'dan' && window.go) { window.go('dan'); } }
+  function decorateToday() {
+    if (!isStudent()) { return; }
+    var view = document.getElementById('view'); if (!view) { return; }
+    var panel = view.querySelector('.panel') || view;
+    var bar = document.getElementById('nvLoopBar');
+    if (!bar || !panel.contains(bar)) {
+      if (bar && bar.parentNode) { bar.parentNode.removeChild(bar); }
+      bar = document.createElement('div'); bar.id = 'nvLoopBar'; bar.className = 'nvLoopBar'; bar.addEventListener('click', onLoopBar);
+      var tc = document.getElementById('nvTodayCard');
+      if (tc && panel.contains(tc)) { tc.parentNode.insertBefore(bar, tc.nextSibling); } else { var h = panel.querySelector('h2.sec'); panel.insertBefore(bar, h || panel.firstChild); }
+    }
+    bar.innerHTML = loopBarHtml();
+    Array.prototype.forEach.call(panel.querySelectorAll('.rev button[onclick]'), function (btn) {
+      var m = /doRevDB\((\d+)/.exec(btn.getAttribute('onclick') || ''); if (!m) { return; }
+      var si = REV2SI[+m[1]]; if (!si) { return; }
+      var all = DAN.filter(function (d) { return d.study_item_id === si; }), left = all.filter(function (d) { return d.status !== 'cleared'; }).length;
+      var span = btn.parentNode.querySelector('.m span'); if (!span || span.querySelector('.nvRevC')) { return; }
+      var tag = document.createElement('b'); tag.className = 'nvRevC'; tag.style.color = '#2B5F8B'; tag.textContent = all.length ? ' · 남은 개념 ' + left + '/' + all.length : ' · 개념 추가 필요';
+      span.appendChild(tag);
+      btn.textContent = btn.classList.contains('run') ? '체크 이어서' : '회독 체크';
+    });
+  }
+  function decorateQuiz() {
+    if (!isStudent()) { return; }
+    var view = document.getElementById('view'); if (!view) { return; }
+    var panel = view.querySelector('.panel') || view; if (panel.querySelector('#nvQuizLoop')) { return; }
+    var c = counts(), box = document.createElement('div'); box.id = 'nvQuizLoop'; box.className = 'nvLoopBar';
+    box.innerHTML = '<div class="nvLbT"><b>약점 문제 — 남은 모르는 것 ' + c.left + '개</b><span>5회독 뒤에도 남은 개념만 골라 문제로 만들어요. 다른 날 두 번 연속 맞히면 단권화에서 지워져요. 아래 문제은행에서 틀린 문제도 단권화 후보로 담겨요.</span></div>'
+      + '<div class="nvLbBtns"><button type="button" class="nvBtn nvPri" data-a="drill"' + (c.left ? '' : ' disabled') + '>약점 문제 풀기</button></div>';
+    box.addEventListener('click', onLoopBar);
+    var h = panel.querySelector('h2.sec'); if (h && h.nextSibling) { panel.insertBefore(box, h.nextSibling); } else { panel.insertBefore(box, panel.firstChild); }
+  }
+  function decorateGate(k) {
+    if (!isStudent() || (k !== 'today' && k !== 'dan' && k !== 'cal')) { return; }
+    var view = document.getElementById('view'); if (!view || view.querySelector('.nvGateCta')) { return; }
+    if (!/먼저 진단·매칭을 완료해 주세요/.test(view.textContent || '')) { return; }
+    var box = document.createElement('div'); box.className = 'nvGateCta';
+    box.innerHTML = '<b>진단 없이 바로 시작할 수도 있어요</b><span>오늘 들은 강의와 배운 개념을 등록하면 5회독 일정이 바로 잡혀요.</span><button type="button" class="nvBtn nvPri" data-a="lec">오늘 들은 강의 등록</button>';
+    box.addEventListener('click', onLoopBar);
+    var panel = view.querySelector('.panel') || view; panel.appendChild(box);
+  }
+  /* 계정 삭제 (나 · 성장 리포트 화면 맨 아래) */
+  var delEl = sheet('nvDelete', '계정 삭제');
+  function openDelete() {
+    inner(delEl).innerHTML = head('계정 삭제', '되돌릴 수 없어요')
+      + '<p class="nvShLead">삭제하면 이 계정의 <b>학습 기록 · 5회독 일정 · 단권화 · 퀴즈 기록 · 집중 기록 · 학부모 연결</b>이 모두 지워지고 다시 살릴 수 없어요. 법령상 보관 의무가 있는 결제 기록이 있으면 그 기간 동안만 따로 보관합니다.</p>'
+      + '<label class="nvLbl" for="nvDelIn">확인을 위해 <b>삭제</b>라고 입력하세요</label><input id="nvDelIn" class="nvIn" maxlength="4" autocomplete="off">'
+      + '<div id="nvDelMsg"></div>'
+      + '<div class="nvShFoot"><span class="nvShInfo"></span><button type="button" class="nvBtn" data-a="close">취소</button><button type="button" class="nvBtn nvPri" data-a="del" disabled>계정 삭제</button></div>';
+    openSheet(delEl);
+  }
+  delEl.addEventListener('input', function (e) { if (e.target.id === 'nvDelIn') { var btn = delEl.querySelector('[data-a="del"]'); if (btn) { btn.disabled = e.target.value.trim() !== '삭제'; } } });
+  delEl.addEventListener('click', async function (e) {
+    var b = e.target.closest('button'); if (!b) { return; }
+    if (b.dataset.a === 'close') { if (!delEl.dataset.busy) { closeSheet(delEl); } return; }
+    if (b.dataset.a !== 'del' || delEl.dataset.busy) { return; }
+    var inp = document.getElementById('nvDelIn'); if (!inp || inp.value.trim() !== '삭제') { return; }
+    delEl.dataset.busy = '1'; b.disabled = true; b.textContent = '삭제 중…';
+    try {
+      await rpc('app_delete_my_account', { p_confirm: '삭제' });
+      try { ['neoya_focus_cur', 'neoya_focus_q', 'neoya_focus_bad', 'neoya_twa'].forEach(function (k) { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e1) { } }); } catch (e2) { }
+      try { await sbc().auth.signOut(); } catch (e3) { }
+      location.replace('/?account=deleted');
+    } catch (err) {
+      delete delEl.dataset.busy; b.disabled = false; b.textContent = '계정 삭제';
+      var m = document.getElementById('nvDelMsg'); if (m) { m.innerHTML = '<div class="nvMsg bad" role="alert">' + esc(/admin/.test(String(err && err.message)) ? '관리자 계정은 앱에서 삭제할 수 없어요.' : errText(err, '삭제하지 못했어요. 잠시 후 다시 시도하거나 hello@neoya.kr 로 요청해 주세요.')) + '</div>'; }
+    }
+  });
+  function decorateAccount(k) {
+    if (!user() || (k !== 'shop' && k !== 'parent') || st().sampleMode || st().role === 'admin' || st().adminFull) { return; }
+    var view = document.getElementById('view'); if (!view || view.querySelector('.nvAcct')) { return; }
+    var panel = view.querySelector('.panel') || view;
+    var box = document.createElement('div'); box.className = 'nvAcct';
+    box.innerHTML = '<h3>계정</h3><p>계정을 삭제하면 학습 기록과 단권화가 모두 지워지고 되돌릴 수 없어요. 웹에서도 <a href="/account-delete" style="color:#2B5F8B">계정 삭제 안내</a>를 볼 수 있어요.</p><button type="button" class="nvBtn" data-a="acct-del">계정 삭제</button>';
+    box.addEventListener('click', function (e) { if (e.target.closest('[data-a="acct-del"]')) { openDelete(); } });
+    panel.appendChild(box);
+  }
+  /* 앱 셸: 하단 탭 '달력' 자리를 '단권화'로(핵심 루프를 한 번에), 달력은 '나' 화면 바로가기로 */
+  function patchNav() {
+    var nav = document.getElementById('nvNav'); if (!nav) { return false; }
+    if (nav.querySelector('button[data-k="dan"]')) { return true; }
+    var b = nav.querySelector('button[data-k="cal"]'); if (!b) { return false; }
+    b.dataset.k = 'dan'; b.setAttribute('aria-label', '단권화'); b.innerHTML = ICON_BOOK + '<span>단권화</span>';
+    return true;
+  }
+  function patchHub(k) {
+    if (k !== 'shop') { return; }
+    var hub = document.getElementById('nvHub'); if (!hub) { return; }
+    var b = hub.querySelector('button[data-k="dan"]'); if (b) { b.dataset.k = 'cal'; b.textContent = '학습 달력'; }
+  }
+  function afterGo(k) {
+    LAST_K = k;
+    try { patchHub(k); } catch (e) { }
+    try { decorateGate(k); } catch (e) { }
+    try { decorateAccount(k); } catch (e) { }
+    if (!isStudent()) { return; }
+    if (k === 'today') { decorateToday(); loadLoop().then(function () { if (LAST_K === 'today') { decorateToday(); } }); }
+    if (k === 'quiz') { decorateQuiz(); }
+  }
+  function wrapGo() {
+    if (typeof window.go !== 'function') { return false; }
+    if (window.go.__nvLoop) { return true; }
+    if (!window.go.__nvWrapV2) { return false; } /* 앱 셸 래퍼가 먼저 씌워진 뒤에 감싼다 */
+    var orig = window.go;
+    var w = function (k) { var r = orig.apply(this, arguments); try { afterGo(k); } catch (e) { } return r; };
+    w.__nvLoop = true; w.__nvWrapV2 = true; window.go = w; return true;
+  }
+  /* 앱(설치형·/app)은 로그인하면 진단 화면이 아니라 '오늘'로 연다 */
+  function wrapBoot() {
+    if (typeof window.bootIntoApp !== 'function') { return false; }
+    if (window.bootIntoApp.__nvLoop) { return true; }
+    var orig = window.bootIntoApp;
+    var w = function () {
+      var r = orig.apply(this, arguments);
+      try {
+        var s = st();
+        if (root.classList.contains('nv-appshell') && isStudent() && ((s.dbRev && s.dbRev.length) || (s.diag && s.diag.result)) && LAST_K === 'diag' && window.go) { window.go('today'); }
+      } catch (e) { }
+      return r;
+    };
+    w.__nvLoop = true; window.bootIntoApp = w; return true;
+  }
+  var interacted = false;
+  try { document.addEventListener('pointerdown', function () { interacted = true; }, { capture: true, once: true, passive: true }); } catch (e) { }
+  function landToday() {
+    try {
+      var s = st(), on = document.querySelector('.tab.on'), app = document.getElementById('app');
+      if (interacted || !root.classList.contains('nv-appshell') || !isStudent() || !app || app.classList.contains('hidden')) { return; }
+      if (on && on.dataset.k === 'diag' && ((s.dbRev && s.dbRev.length) || (s.diag && s.diag.result)) && window.go) { window.go('today'); }
+    } catch (e) { }
+  }
+  var tries = 0, t = setInterval(function () {
+    var a = wrapGo(), b = wrapRev(), c = wrapDan(), d = wrapDanTools(), e2 = wrapQuiz(), f = wrapBoot(), g = patchNav();
+    if ((a && b && c && d && e2 && f && (g || !document.getElementById('nvNav'))) || ++tries > 200) { clearInterval(t); landToday(); setTimeout(landToday, 1500); }
+  }, 100);
+
+  /* 로그인 사용자가 바뀌면 개념 카드를 새로 읽는다 */
+  var loadedFor = null;
+  setInterval(function () { var who = user() ? user().id : ''; if (who !== loadedFor) { loadedFor = who; DAN = []; SUM = null; REV2SI = {}; if (who) { loadLoop().then(function () { if (LAST_K === 'today') { decorateToday(); } }); } } }, 1500);
+
+  window.nvLoop = { version: 'loop-v1-2026-09-26', reload: loadLoop, openLecture: openLecture, openDrill: openDrill, openCheck: openCheck, openManual: openManual, counts: counts };
+})();
+</script>
+<!-- ▲▲ 코어 루프 v1 끝 ▲▲ -->
 <script src="/native-bridge.js" defer></script>
 </body></html>
