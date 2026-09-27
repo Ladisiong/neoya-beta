@@ -1924,7 +1924,7 @@ html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
     var b = e.target.closest('button'); if (!b) { return; }
     if (b.dataset.a === 'focus') { openFocus(); return; }
     if (b.dataset.a === 'rev') {
-      var k = kstDate(), due = (st().dbRev || []).filter(function (r) { return r.scheduled_date <= k && r.status !== 'done'; }).sort(function (a, c) { return a.scheduled_date < c.scheduled_date ? -1 : 1; });
+      var k = kstDate(), due = (st().dbRev || []).filter(function (r) { return r.scheduled_date <= k && r.status !== 'done'; }).sort(function (a, c) { return a.scheduled_date < c.scheduled_date ? -1 : a.scheduled_date > c.scheduled_date ? 1 : (a.round || 0) - (c.round || 0); });
       if (due[0] && window.doRevDB) { window.doRevDB(due[0].id, due[0].subject); }
     }
   }
@@ -1954,7 +1954,7 @@ html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
       + item(ok2, '순공 ' + fmtHM(studied) + ' / 목표 ' + fmtHM(g), '<div class="nvBarT"><i style="width:' + pct + '%"></i></div>')
       + (cur ? '<div class="nvTcRun">진행 중인 집중: ' + esc(cur.subject) + ' ' + fmtClock(activeSec()) + (running ? '' : ' · 일시정지') + '</div>' : '')
       + '<div class="nvTcFoot">' + (logged ? '<b>연속 학습 ' + streak + '일</b><span>복습 1건 또는 순공 25분이면 이어져요</span>' : '<span>로그인하면 연속 학습 일수가 기록돼요</span>') + '</div>'
-      + '<div class="nvTcBtns"><button type="button" class="nvTcGo" data-a="focus">' + (cur ? '집중 이어가기' : '집중 시작') + '</button>' + (logged && due.length ? '<button type="button" data-a="rev">복습 시작</button>' : '') + '</div>';
+      + '<div class="nvTcBtns">' + (logged && due.length ? '<button type="button" class="nvTcGo" data-a="rev">회독 체크 시작</button><button type="button" data-a="focus">' + (cur ? '집중 이어가기' : '집중 시작') + '</button>' : '<button type="button" class="nvTcGo" data-a="focus">' + (cur ? '집중 이어가기' : '집중 시작') + '</button>') + '</div>';
   }
 
   /* ── 이벤트 ── */
@@ -2022,10 +2022,11 @@ html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
       var row = { student_id: NB.user.id, endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, ua: String(navigator.userAgent).slice(0, 180), last_seen: new Date().toISOString() };
       var ins = await NB.sb.from('push_subscriptions').upsert(row, { onConflict: 'endpoint' });
       if (ins.error) { setPush('구독 저장에 실패했어요: ' + ins.error.message); return; }
-      setPush('알림을 켰어요. 오늘 복습이 있으면 폰으로 알려드릴게요.', true);
+      setPush('알림을 켰어요. 오늘 복습이 있으면 폰으로 알려드릴게요.', true); return true;
     } catch (e) { setPush('알림을 켜지 못했어요: ' + (e && e.message || e)); }
   }
   if (pushBtn) { pushBtn.addEventListener('click', enablePush); }
+  window.nvPush = { enable: enablePush, refresh: refreshPushState, supported: pushSupported, status: function () { return pushState ? pushState.textContent : ''; } };
 
   var returnFocusTo = null;
   function openFocus() {
@@ -2057,7 +2058,7 @@ html:not(.nv-appshell) #nvTodayCard .nvTcBtns button{flex:0 1 220px}
   }
   try { var tabsEl = document.getElementById('tabs'); if (tabsEl) { new MutationObserver(injectTab).observe(tabsEl, { childList: true }); } } catch (e) { }
   injectTab();
-  window.nvApp = { refresh: refreshData, flush: flush, version: 'v2a-web-2026-09-26' };
+  window.nvApp = { refresh: refreshData, flush: flush, openFocus: openFocus, version: 'v2a-web-2026-09-27' };
 
   /* 로그인 사용자가 바뀌면(또는 앱에 처음 들어오면) 줄 세운 기록을 올리고 요약·스트릭을 새로 읽는다.
      6시간 넘게 멈춰 있던 세션은 그때까지의 순공으로 자동 기록한다. */
@@ -2186,6 +2187,9 @@ html.nv-sheet-on{overflow:hidden}
 .nvGateCta{background:#FFFFFF;border:1px solid #E4E7EB;border-radius:12px;padding:14px 16px;margin:12px 0}
 .nvGateCta b{display:block;color:#1A3A5C;font-size:.94rem}
 .nvGateCta span{display:block;color:#616E7C;font-size:.8rem;margin:3px 0 10px;line-height:1.5}
+#nvNav .nvNavCheck.nvLive .nvNavDisc{background:#1A3A5C}
+html.nv-appshell #nvHub{display:grid;grid-template-columns:1fr 1fr}
+html.nv-appshell #nvHub button{min-width:0}
 </style>
 <script>
 (function () {
@@ -2366,6 +2370,8 @@ html.nv-sheet-on{overflow:hidden}
       + (msg ? '<div class="nvMsg good">' + esc(msg) + '</div>' : '')
       + '<div class="nvResBtns">' + ((r.left_total || 0) > 0 ? '<button type="button" class="nvBtn nvPri" data-a="drill">남은 것 약점 문제로 메우기</button>' : '')
       + '<button type="button" class="nvBtn" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>';
+    /* 앱 전용 레이어(설치형 앱)가 있으면 결과 화면에 알림 권유를 붙인다 */
+    try { if (window.nvAppOnly && window.nvAppOnly.onCheckDone) { window.nvAppOnly.onCheckDone(box, r); } } catch (e) { }
   }
   ckEl.addEventListener('click', async function (e) {
     var b = e.target.closest('button'); if (!b || !CK) { return; }
@@ -2400,6 +2406,8 @@ html.nv-sheet-on{overflow:hidden}
       try {
         var res = await rpc('app_review_check', { p_event: CK.id, p_marks: marks, p_duration: ckSec() });
         var s = st(); if (s.timing) { delete s.timing['db' + CK.id]; }
+        /* 목록을 다시 읽기 전에 같은 회독이 또 열리지 않게 로컬 상태부터 완료로 */
+        (s.dbRev || []).forEach(function (r) { if (r && r.id === CK.id) { r.status = 'done'; } });
         try { if (window.addXp) { window.addXp(20); } if (window.addPts) { window.addPts(50); } } catch (e2) { }
         CK.res = res || {}; CK.phase = 'done'; CK.busy = false; delete ckEl.dataset.busy; clearInterval(ckTick);
         renderCheck(); refreshAll();
@@ -2537,8 +2545,8 @@ html.nv-sheet-on{overflow:hidden}
     if (DR.phase === 'load') { box.innerHTML = head('약점 문제', '남은 모르는 개념으로 문제를 만드는 중…') + '<p class="nvShLead">5회독 뒤에도 남은 개념만 골라 4지선다로 만들어요. 보통 20초 안팎, 길면 1분쯤 걸려요.</p>'; return; }
     if (DR.phase === 'err') { box.innerHTML = head('약점 문제', '') + '<div class="nvMsg bad" role="alert">' + esc(DR.err) + '</div><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="retry">다시 시도</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
     if (DR.phase === 'cap' && DR.attemptCap) { box.innerHTML = head('오늘은 문제를 더 만들 수 없어요', '') + '<p class="nvShLead">오늘 만들 수 있는 횟수를 다 썼어요. 내일 남은 개념으로 다시 만들어 드려요. 그동안 단권화를 읽고 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
-    if (DR.phase === 'cap') { box.innerHTML = head('오늘 약점 문제를 다 풀었어요', '하루 10문항') + '<p class="nvShLead">내일 남은 개념으로 새로 만들어 드려요. 오늘은 단권화를 다시 읽고, 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
-    if (DR.phase === 'empty') { box.innerHTML = head('남은 모르는 개념이 없어요', '') + '<p class="nvShLead">오늘 들은 강의를 등록하고 회독 체크를 하면, 모르는 것만 남아 여기서 문제로 메울 수 있어요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="lec">오늘 들은 강의 등록</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'cap') { box.innerHTML = head('오늘 약점 문제를 다 풀었어요', '하루 10문항') + '<p class="nvShLead">내일 남은 개념으로 새로 만들어 드려요. 오늘은 단권화를 다시 읽고, 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="bank">과목 문제은행 풀기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
+    if (DR.phase === 'empty') { box.innerHTML = head('남은 모르는 개념이 없어요', '') + '<p class="nvShLead">오늘 들은 강의를 등록하고 회독 체크를 하면, 모르는 것만 남아 여기서 문제로 메울 수 있어요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="lec">오늘 들은 강의 등록</button><button type="button" class="nvBtn" data-a="bank">과목 문제은행 풀기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
     if (DR.phase === 'end') {
       box.innerHTML = head('약점 문제 결과', '')
         + '<div class="nvResBig"><div><b>' + DR.right + '/' + DR.done + '</b><span>정답</span></div><div><b>' + DR.cleared + '</b><span>이번에 지움</span></div><div><b>' + (DR.left == null ? '-' : DR.left) + '</b><span>남은 것</span></div></div>'
@@ -2554,7 +2562,7 @@ html.nv-sheet-on{overflow:hidden}
       + '<p class="nvQ">' + esc(q.question) + '</p>'
       + opts.map(function (o, k) {
         var cls = A ? (k === A.answer ? ' ok' : (k === A.sel && !A.correct ? ' no' : '')) : '';
-        return '<button type="button" class="nvOpt' + cls + '" data-o="' + k + '"' + (A || DR.busy ? ' disabled' : '') + '><b>' + (k + 1) + '</b>' + esc(o) + (A && k === A.answer ? ' (정답)' : '') + (A && k === A.sel && !A.correct ? ' (내 답)' : '') + '</button>';
+        return '<button type="button" class="nvOpt' + cls + '" data-o="' + k + '"' + (A || DR.busy ? ' disabled' : '') + '><b>' + ['①', '②', '③', '④'][k] + '</b>' + esc(o) + (A && k === A.answer ? ' (정답)' : '') + (A && k === A.sel && !A.correct ? ' (내 답)' : '') + '</button>';
       }).join('')
       + (A ? '<div class="nvMsg ' + (A.correct ? 'good' : 'bad') + '" role="status">' + (A.correct ? '정답이에요. ' : '틀렸어요. ') + esc(A.explanation || '') + (A.status === 'cleared' ? ' 이 개념은 이제 단권화에서 지웠어요.' : A.correct ? ' 다른 날 한 번 더 맞히면 지워져요.' : ' 단권화에 남겨 둘게요.') + '</div>'
         + '<div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="next">' + (DR.i + 1 < DR.qs.length ? '다음 문제' : '결과 보기') + '</button></div>' : '')
@@ -2578,6 +2586,7 @@ html.nv-sheet-on{overflow:hidden}
     if (a === 'next') { DR.i++; DR.ans = null; if (DR.i >= DR.qs.length) { DR.phase = 'end'; loadLoop(); } renderDrill(); return; }
     if (a === 'more' || a === 'retry') { fetchDrill(); return; }
     if (a === 'lec') { closeSheet(drEl); openLecture(); return; }
+    if (a === 'bank') { closeSheet(drEl); if (window.go) { window.go('quiz'); } return; }
     if (a === 'dan') { closeSheet(drEl); refreshAll(); if (window.go) { window.go('dan'); } return; }
     if (a === 'close') { if (DR.busy) { return; } closeSheet(drEl); refreshAll(); if (window.go && (curView() === 'dan' || curView() === 'quiz' || curView() === 'today')) { window.go(curView()); } return; }
   });
@@ -2739,9 +2748,11 @@ html.nv-sheet-on{overflow:hidden}
     if (!bar || !panel.contains(bar)) {
       if (bar && bar.parentNode) { bar.parentNode.removeChild(bar); }
       bar = document.createElement('div'); bar.id = 'nvLoopBar'; bar.className = 'nvLoopBar'; bar.addEventListener('click', onLoopBar);
-      var tc = document.getElementById('nvTodayCard');
-      if (tc && panel.contains(tc)) { tc.parentNode.insertBefore(bar, tc.nextSibling); } else { var h = panel.querySelector('h2.sec'); panel.insertBefore(bar, h || panel.firstChild); }
+      var h = panel.querySelector('h2.sec'); panel.insertBefore(bar, h || panel.firstChild);
     }
+    /* 핵심 루프 막대가 '오늘의 과제' 카드보다 위에 오도록 */
+    var tc = document.getElementById('nvTodayCard');
+    if (tc && panel.contains(tc) && tc.parentNode === bar.parentNode && (bar.compareDocumentPosition(tc) & 2)) { tc.parentNode.insertBefore(bar, tc); }
     bar.innerHTML = loopBarHtml();
     Array.prototype.forEach.call(panel.querySelectorAll('.rev button[onclick]'), function (btn) {
       var m = /doRevDB\((\d+)/.exec(btn.getAttribute('onclick') || ''); if (!m) { return; }
@@ -2809,17 +2820,64 @@ html.nv-sheet-on{overflow:hidden}
     panel.appendChild(box);
   }
   /* 앱 셸: 하단 탭 '달력' 자리를 '단권화'로(핵심 루프를 한 번에), 달력은 '나' 화면 바로가기로 */
+  /* 하단 탭 = 핵심 루프 순서: 오늘 · 단권화 · [복습 체크] · 약점 문제 · 나 (집중은 오늘 카드·나 화면에서) */
+  var ICON_CHECK = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>';
+  var ICON_TARGET = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>';
   function patchNav() {
     var nav = document.getElementById('nvNav'); if (!nav) { return false; }
-    if (nav.querySelector('button[data-k="dan"]')) { return true; }
-    var b = nav.querySelector('button[data-k="cal"]'); if (!b) { return false; }
-    b.dataset.k = 'dan'; b.setAttribute('aria-label', '단권화'); b.innerHTML = ICON_BOOK + '<span>단권화</span>';
-    return true;
+    var b = nav.querySelector('button[data-k="cal"]');
+    if (b) { b.dataset.k = 'dan'; b.setAttribute('aria-label', '단권화'); b.innerHTML = ICON_BOOK + '<span>단권화</span>'; }
+    var c = nav.querySelector('button[data-k="focus"]');
+    if (c) { c.dataset.k = 'check'; c.classList.add('nvNavCheck'); c.setAttribute('aria-label', '복습 체크'); c.innerHTML = '<span class="nvNavDisc">' + ICON_CHECK + '</span><span>복습 체크</span>'; }
+    var q = nav.querySelector('button[data-k="quiz"]');
+    if (q) { q.dataset.k = 'drill'; q.setAttribute('aria-label', '약점 문제'); q.innerHTML = ICON_TARGET + '<span>약점 문제</span>'; }
+    if (!nav.__nvLoopNav) {
+      nav.__nvLoopNav = true;
+      /* 앱 셸의 탭 이동보다 먼저 받아 처리한다(check·drill 은 탭이 아니라 동작) */
+      nav.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t) { return; }
+        var k = t.dataset.k; if (k !== 'check' && k !== 'drill') { return; }
+        e.stopPropagation(); e.preventDefault();
+        if (k === 'check') { navCheck(); } else { navDrill(); }
+      }, true);
+    }
+    return !!nav.querySelector('button[data-k="dan"]') && !!nav.querySelector('button[data-k="check"]') && !!nav.querySelector('button[data-k="drill"]');
+  }
+  function dueList() {
+    var t = kstDate();
+    return (st().dbRev || []).filter(function (r) { return r && r.status !== 'done' && r.scheduled_date && r.scheduled_date <= t; })
+      .sort(function (a, b) { return a.scheduled_date < b.scheduled_date ? -1 : a.scheduled_date > b.scheduled_date ? 1 : a.round - b.round; });
+  }
+  function navCheck() {
+    if (!isStudent()) { if (window.go) { window.go('today'); } return; }
+    var due = dueList();
+    if (due.length) { if (window.go && LAST_K !== 'today') { window.go('today'); } openCheck(due[0].id, due[0].subject); return; }
+    if (window.go && LAST_K !== 'today') { window.go('today'); }
+    var next = (st().dbRev || []).filter(function (r) { return r && r.status !== 'done' && r.scheduled_date > kstDate(); })
+      .sort(function (a, b) { return a.scheduled_date < b.scheduled_date ? -1 : 1; })[0];
+    if (next) { say('오늘 체크할 복습은 다 했어요. 다음 회독은 ' + next.scheduled_date.slice(5).replace('-', '/') + ' ' + (next.subject || '') + ' ' + next.round + '회독이에요.'); }
+    else { openLecture(); }
+  }
+  function navDrill() {
+    if (!isStudent()) { if (window.go) { window.go('quiz'); } return; }
+    openDrill();
   }
   function patchHub(k) {
     if (k !== 'shop') { return; }
     var hub = document.getElementById('nvHub'); if (!hub) { return; }
     var b = hub.querySelector('button[data-k="dan"]'); if (b) { b.dataset.k = 'cal'; b.textContent = '학습 달력'; }
+    if (!hub.querySelector('button[data-k="focus"]')) {
+      var f = document.createElement('button'); f.type = 'button'; f.dataset.k = 'focus'; f.textContent = '집중(순공)';
+      hub.insertBefore(f, hub.firstChild);
+    }
+    if (!hub.__nvLoopHub) {
+      hub.__nvLoopHub = true;
+      hub.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t || t.dataset.k !== 'focus') { return; }
+        e.stopPropagation(); e.preventDefault();
+        if (window.nvApp && window.nvApp.openFocus) { window.nvApp.openFocus(); } else if (window.go) { window.go('today'); }
+      }, true);
+    }
   }
   function afterGo(k) {
     LAST_K = k;
@@ -2871,9 +2929,221 @@ html.nv-sheet-on{overflow:hidden}
   var loadedFor = null;
   setInterval(function () { var who = user() ? user().id : ''; if (who !== loadedFor) { loadedFor = who; DAN = []; SUM = null; REV2SI = {}; if (who) { loadLoop().then(function () { if (LAST_K === 'today') { decorateToday(); } }); } } }, 1500);
 
-  window.nvLoop = { version: 'loop-v1-2026-09-26', reload: loadLoop, openLecture: openLecture, openDrill: openDrill, openCheck: openCheck, openManual: openManual, counts: counts };
+  /* 안드로이드 뒤로가기용: 맨 위 시트를 닫는다(저장 중이면 닫지 않고 true — 뒤로가기를 소비만 한다) */
+  function closeTop() { var on = document.querySelectorAll('.nvSheet.on'); var t = on[on.length - 1]; if (!t) { return false; } if (!t.dataset.busy) { closeSheet(t); } return true; }
+  window.nvLoop = { version: 'loop-v1.1-2026-09-27', reload: loadLoop, openLecture: openLecture, openDrill: openDrill, openCheck: openCheck, openManual: openManual, counts: counts, closeTop: closeTop };
 })();
 </script>
 <!-- ▲▲ 코어 루프 v1 끝 ▲▲ -->
+<!-- ▼▼ 앱 전용 v1 (안드로이드 앱·설치형) 2026-09-27 · DEV(D04) · 뒤로가기·바로가기·알림 권유·앱 진입 계측 ▼▼ -->
+<style>
+.nvPushCta{margin-top:12px;border:1px solid #A8C4DD;background:#F5F9FC;border-radius:12px;padding:12px 14px;color:#1A3A5C}
+.nvPushCta b{display:block;font-size:.92rem}
+.nvPushCta p{margin:6px 0 0;font-size:.82rem;line-height:1.55;color:#2B5F8B}
+.nvPushCta .nvPushBtns{display:flex;gap:8px;margin-top:10px}
+.nvPushCta .nvPushMsg:empty{display:none}
+</style>
+<script>
+(function () {
+  'use strict';
+  if (window.nvAppOnly) { return; }
+  var root = document.documentElement;
+  var PKG = 'kr.neoya.app';
+  var GO_OK = { check: 1, lecture: 1, drill: 1, dan: 1, focus: 1, today: 1 };
+
+  function ssGet(k) { try { return window.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { window.sessionStorage.setItem(k, v); } catch (e) { } }
+  function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { } }
+  function st() { return window.state || {}; }
+  function kstDate() { return new Date(Date.now() + 324e5).toISOString().slice(0, 10); }
+  function standalone() { try { return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; } catch (e) { return false; } }
+
+  /* ── 진입 경로: 안드로이드 앱(TWA) / 설치형(PWA) / 웹 ── */
+  var qs = (function () { try { return new URLSearchParams(location.search); } catch (e) { return null; } })();
+  (function detect() {
+    try {
+      if (String(document.referrer || '').indexOf('android-app://' + PKG) === 0 || (qs && qs.get('src') === 'twa')) { ssSet('nv_src', 'twa'); }
+      /* 스토어 결제 정책: 앱에서는 업셀 문구(.nv-upsell)를 숨기는 기존 훅(html.neoya-native)을 함께 켠다 */
+      if (ssGet('nv_src') === 'twa') { ssSet('neoya_twa', '1'); root.classList.add('neoya-native', 'neoya-twa'); }
+    } catch (e) { }
+  })();
+  function source() {
+    if (ssGet('nv_src') === 'twa' || ssGet('neoya_twa') === '1' || root.classList.contains('neoya-twa')) { return 'twa'; }
+    if (root.classList.contains('neoya-native')) { return 'native'; }
+    if (standalone()) { return 'pwa'; }
+    return 'web';
+  }
+  function isAppCtx() { return source() !== 'web'; }
+  if (isAppCtx()) { root.classList.add('nv-installed'); }
+
+  /* ── 바로가기·알림에서 넘어온 목적지(?go=) ── */
+  var pendingGo = null, launch = 'launcher';
+  if (qs) {
+    var g = qs.get('go');
+    if (g && GO_OK[g]) { pendingGo = g; launch = qs.get('src') === 'push' ? 'push' : 'shortcut:' + g; }
+    if (g || qs.get('src')) {
+      try {
+        qs.delete('go'); qs.delete('src');
+        var rest = qs.toString();
+        history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+      } catch (e) { }
+    }
+  }
+
+  /* ── 앱 진입 계측(GA4 · 개인 식별 정보 없음) ── */
+  try { if (isAppCtx() && typeof window.gtag === 'function') { window.gtag('event', 'app_open', { app_source: source(), launch: launch }); } } catch (e) { }
+
+  function inApp() { var a = document.getElementById('app'); return !!(a && !a.classList.contains('hidden')); }
+  /* 부팅 완료 판정: 로그인 사용자의 복습 목록이 새로 채워졌는가(기본값 배열과 다른 배열) */
+  var REV0 = st().dbRev;
+  function booted() { var u = window.NB && window.NB.user; return !!(u && window.NB._bootedFor === u.id && st().dbRev !== REV0 && Array.isArray(st().dbRev)); }
+  function curTab() { var t = document.querySelector('.tab.on'); return t ? t.dataset.k : ''; }
+  function homeTab() { var s = st(); if (s.adminFull || s.role === 'admin') { return 'admin'; } if (s.role === 'parent') { return 'parent'; } return 'today'; }
+  function isStudent() { var s = st(); return !!(window.NB && window.NB.user) && !s.sampleMode && s.role !== 'parent' && s.role !== 'admin' && !s.adminFull; }
+  function say(t) { try { if (typeof window.toast === 'function') { window.toast(t); } } catch (e) { } }
+
+  function runGo(k) {
+    if (!window.go) { return; }
+    if (!isStudent()) { window.go(homeTab()); return; }
+    if (k === 'focus') { if (window.nvApp && window.nvApp.openFocus) { window.nvApp.openFocus(); } else { window.go('today'); } return; }
+    if (k === 'dan' || k === 'today') { window.go(k); return; }
+    if (!window.nvLoop) { window.go('today'); return; }
+    if (k === 'lecture') { window.nvLoop.openLecture(); return; }
+    if (k === 'drill') { window.nvLoop.openDrill(); return; }
+    if (k === 'check') {
+      var today = kstDate();
+      var due = (st().dbRev || []).filter(function (r) { return r && r.status !== 'done' && r.scheduled_date && r.scheduled_date <= today; })
+        .sort(function (a, b) { return a.scheduled_date < b.scheduled_date ? -1 : a.scheduled_date > b.scheduled_date ? 1 : a.round - b.round; });
+      window.go('today');
+      if (due.length) { window.nvLoop.openCheck(due[0].id, due[0].subject); } else { say('오늘 체크할 복습이 없어요. 강의를 등록하면 5회독 일정이 잡혀요.'); }
+    }
+  }
+  /* 로그인·데이터가 준비되면 한 번만 실행(최대 90초 대기) */
+  var goTimer = 0;
+  function queueGo(k) {
+    pendingGo = k; clearInterval(goTimer);
+    var tries = 0, gi = goTimer = setInterval(function () {
+      tries++;
+      var ready = inApp() && window.go && booted() && window.nvLoop;
+      if (ready) { clearInterval(gi); var k = pendingGo; pendingGo = null; setTimeout(function () { try { runGo(k); } catch (e) { } }, 700); }
+      else if (tries > 450) { clearInterval(gi); pendingGo = null; }
+    }, 200);
+  }
+  if (pendingGo) { queueGo(pendingGo); }
+
+  /* 이미 열려 있는 앱에서 알림을 누르면 서비스 워커가 보낸 목적지로 이동(새로 고침 없이) */
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', function (e) {
+        var d = e && e.data; if (!d || d.type !== 'nv-open' || typeof d.url !== 'string') { return; }
+        var g2 = null; try { var u = new URL(d.url, location.origin); if (u.origin === location.origin) { g2 = u.searchParams.get('go'); } } catch (x) { }
+        if (!g2 || !GO_OK[g2]) { return; }
+        try { if (typeof window.gtag === 'function') { window.gtag('event', 'app_open', { app_source: source(), launch: 'push' }); } } catch (x2) { }
+        if (booted() && window.nvLoop) { runGo(g2); } else { queueGo(g2); }
+      });
+    }
+  } catch (e) { }
+
+  /* ── 안드로이드 뒤로가기: 열린 창 닫기 → 첫 화면 → 두 번 눌러 종료 ── */
+  var busyBacks = 0, busyAt = 0;
+  function closeTop() {
+    var on = document.querySelectorAll('.nvSheet.on'), top = on[on.length - 1];
+    if (top && top.dataset.busy) { if (Date.now() - busyAt > 3000) { busyBacks = 0; } busyAt = Date.now(); busyBacks++; if (busyBacks < 2) { return true; } } /* 저장 중: 한 번은 기다리고, 연속 두 번째는 통과 */
+    else { busyBacks = 0; try { if (top && window.nvLoop && window.nvLoop.closeTop && window.nvLoop.closeTop()) { return true; } } catch (e) { } }
+    var menu = document.getElementById('nvAiMenu');
+    if (menu && menu.classList.contains('on')) { menu.classList.remove('on'); var fb = document.getElementById('nvAiFabBtn'); if (fb) { fb.setAttribute('aria-expanded', 'false'); } return true; }
+    var chat = document.getElementById('nvChatPanel');
+    if (chat && chat.classList.contains('on') && window.nvCloseChat) { window.nvCloseChat(); return true; }
+    var tp = document.getElementById('nt-panel');
+    if (tp && !tp.hasAttribute('hidden')) { var nx = document.getElementById('nt-close'); if (nx) { nx.click(); return true; } }
+    var md = document.getElementById('modal');
+    if (md && !md.classList.contains('hidden') && typeof window.closeHist === 'function') { window.closeHist(); return true; }
+    if (root.classList.contains('nv-focus-on')) { var fx = document.getElementById('nvFcClose'); if (fx) { fx.click(); return true; } }
+    return false;
+  }
+  var guarded = false, exitArmed = 0, exitTimer = 0;
+  function backActive() { return isAppCtx() && inApp(); }
+  function pushGuard() {
+    try { if (history.state && history.state.nvGuard) { guarded = true; return; } history.pushState({ nvGuard: 1 }, ''); guarded = true; } catch (e) { }
+  }
+  window.addEventListener('popstate', function (e) {
+    if (!backActive()) { guarded = false; return; }
+    if (!guarded) { return; }
+    if (e.state && e.state.nvGuard) { return; }
+    guarded = false;
+    if (closeTop()) { pushGuard(); return; }
+    var home = homeTab(), k = curTab();
+    if (k && k !== home && window.go) { window.go(home); pushGuard(); return; }
+    /* 첫 화면: 한 번 더 누르면 기본 동작(앱 닫힘) */
+    if (exitArmed && Date.now() - exitArmed < 2500) { exitArmed = 0; return; }
+    exitArmed = Date.now(); say('뒤로 버튼을 한 번 더 누르면 나가요');
+    clearTimeout(exitTimer);
+    exitTimer = setTimeout(function () { if (exitArmed) { exitArmed = 0; if (backActive()) { pushGuard(); } } }, 2500);
+  });
+  /* 앱 화면이 보이면 보호 항목을 한 칸 쌓는다 */
+  var bi = setInterval(function () { if (backActive() && !guarded && !exitArmed) { pushGuard(); } }, 600);
+  setTimeout(function () { if (!isAppCtx()) { clearInterval(bi); } }, 3000);
+
+  /* ── 복습 체크 결과 뒤 알림 권유(설치형 앱에서만 · 거절 7일 유지) ── */
+  function pushOk() { return !!(window.nvPush && window.nvPush.supported && window.nvPush.supported()) && ('Notification' in window) && Notification.permission !== 'denied'; }
+  function timeout(p, ms, v) { return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(v); }, ms); })]); }
+  async function localSub() {
+    try { var reg = await timeout(navigator.serviceWorker.getRegistration(), 4000, null); if (!reg) { return null; } return await reg.pushManager.getSubscription(); } catch (e) { return null; }
+  }
+  /* 이 기기 구독이 '지금 로그인한 학생' 이름으로 서버에 저장돼 있는가 */
+  async function serverSub() {
+    var sub = await localSub(); if (!sub || !window.NB || !window.NB.sb || !window.NB.user) { return false; }
+    try { var r = await window.NB.sb.from('push_subscriptions').select('id').eq('endpoint', sub.endpoint).eq('student_id', window.NB.user.id).limit(1); return !r.error && Array.isArray(r.data) && r.data.length > 0; } catch (e) { return false; }
+  }
+  async function onCheckDone(box) {
+    if (!isAppCtx() || !isStudent() || !pushOk() || !box) { return; }
+    var until = +(lsGet('nv_push_cta_until') || 0); if (until && Date.now() < until) { return; }
+    if (await serverSub()) { return; }
+    /* 기다리는 동안 다른 화면으로 바뀌었으면 붙이지 않는다 */
+    if (!box.isConnected || !box.querySelector('.nvResBig') || !box.querySelector('.nvResBtns') || box.querySelector('.nvPushCta')) { return; }
+    var card = document.createElement('div'); card.className = 'nvPushCta'; card.setAttribute('role', 'region'); card.setAttribute('aria-label', '복습 알림');
+    card.innerHTML = '<b>다음 회독 날, 알림으로 챙길까요?</b>'
+      + '<p>5회독은 정해진 날에 다시 봐야 아는 것이 지워지고 모르는 것만 남아요. 복습이 남은 날 저녁 7시에 알려 드려요.</p>'
+      + '<div class="nvPushBtns"><button type="button" class="nvBtn nvPri" data-p="on">알림 받기</button><button type="button" class="nvBtn" data-p="later">나중에</button></div>'
+      + '<p class="nvPushMsg" aria-live="polite"></p>';
+    card.addEventListener('click', async function (e) {
+      var b = e.target.closest('button'); if (!b) { return; }
+      e.stopPropagation();
+      var msg = card.querySelector('.nvPushMsg');
+      if (b.dataset.p === 'later') { lsSet('nv_push_cta_until', String(Date.now() + 7 * 864e5)); card.parentNode && card.parentNode.removeChild(card); return; }
+      if (b.disabled) { return; }
+      b.disabled = true; msg.textContent = '알림을 켜는 중이에요…';
+      var on = false;
+      try { on = (await timeout(window.nvPush.enable(), 12000, 'timeout')) === true; } catch (e2) { on = false; }
+      var txt = (window.nvPush.status && window.nvPush.status()) || '';
+      msg.textContent = on ? '알림을 켰어요. 복습이 남은 날 저녁에 알려 드릴게요.' : (Notification.permission === 'denied' ? '알림 권한이 꺼져 있어요. 휴대폰 설정 → 앱 → 너야 → 알림에서 켤 수 있어요.' : '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.');
+      if (on) { var bs = card.querySelector('.nvPushBtns'); if (bs) { bs.parentNode.removeChild(bs); } try { if (typeof window.gtag === 'function') { window.gtag('event', 'push_opt_in', { app_source: source(), where: 'check_done' }); } } catch (e3) { } }
+      else { b.disabled = false; }
+    });
+    var btns = box.querySelector('.nvResBtns');
+    if (btns) { box.insertBefore(card, btns); } else { box.appendChild(card); }
+  }
+
+  async function dropPush() {
+    var sub = await localSub(); if (!sub) { return; }
+    try { if (window.NB && window.NB.sb) { await window.NB.sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } } catch (e) { }
+    try { await sub.unsubscribe(); } catch (e) { }
+  }
+  (function wrapLogout() {
+    var t = 0, i = setInterval(function () {
+      var f = window.nbLogout;
+      if (typeof f === 'function') {
+        clearInterval(i); if (f.__nvApp) { return; }
+        var w = async function () { try { await timeout(dropPush(), 3000); } catch (e) { } return f.apply(this, arguments); };
+        w.__nvApp = true; window.nbLogout = w;
+      } else if (++t > 150) { clearInterval(i); }
+    }, 100);
+  })();
+
+  window.nvAppOnly = { version: 'app-android-v1-2026-09-27', source: source, isAppCtx: isAppCtx, onCheckDone: onCheckDone, closeTop: closeTop, runGo: runGo };
+})();
+</script>
+<!-- ▲▲ 앱 전용 v1 끝 ▲▲ -->
 <script src="/native-bridge.js" defer></script>
 </body></html>

@@ -56,14 +56,14 @@ self.addEventListener('push', function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : '' }; }
   var title = d.title || '너야';
-  var opts = { body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', data: { url: d.url || '/app' } };
+  var opts = { body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', tag: d.tag || 'neoya', renotify: false, data: { url: d.url || '/app' } };
   e.waitUntil(self.registration.showNotification(title, opts));
 });
 self.addEventListener('notificationclick', function (e) {
   e.notification.close();
   var url = (e.notification.data && e.notification.data.url) || '/app';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-    for (var i = 0; i < list.length; i++) { if (list[i].url.indexOf(url) >= 0 && 'focus' in list[i]) { return list[i].focus(); } }
+    var pick = null; for (var i = 0; i < list.length; i++) { var c = list[i], u = null; try { u = new URL(c.url); } catch (err) { } if (!u || u.origin !== self.location.origin || !('focus' in c)) { continue; } if (u.pathname === '/app' || u.pathname.indexOf('/app/') === 0) { pick = c; break; } if (!pick) { pick = c; } } if (pick) { try { pick.postMessage({ type: 'nv-open', url: url }); } catch (err) { } return pick.focus(); }
     if (self.clients.openWindow) { return self.clients.openWindow(url); }
   }));
 });
