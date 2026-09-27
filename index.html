@@ -573,6 +573,7 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
     </div>
   </div>
   <button class="btn" id="authBtn" onclick="nbPrimary()" style="width:100%;margin-top:8px;font-size:.95rem;padding:13px">로그인</button>
+  <div id="nvForgot"><button type="button" onclick="nvForgot()">비밀번호를 잊으셨나요?</button></div>
   <div style="font-size:.82rem;color:var(--muted);margin-top:11px" id="authSwitch">처음이신가요? <button type="button" onclick="nbToggle()" style="background:none;border:none;padding:0;font:inherit;color:var(--mid);cursor:pointer;font-weight:800">회원가입</button></div>
   <div id="authMsg" style="font-size:.8rem;color:var(--c1);min-height:18px;margin-top:8px"></div>
 </div></div>
@@ -1344,27 +1345,115 @@ try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.
 @media(max-width:480px){#nt-panel{width:calc(100vw - 24px);height:calc(100vh - 96px)}#nt-root{right:12px;bottom:12px}}
 </style>
 <script>
+/* AI 학습 튜터 v2 (2026-09-27 · DEV D04 · CVO 「직접 써 보니 AI 튜터가 응답을 안 해」)
+   원인: 답 하나를 20초 넘게 한 번에 기다리는 요청이라, 그사이 휴대폰 연결이 끊기면 서버가 만든 답을 받지 못했다.
+   v2: ① 답을 글자가 만들어지는 대로 흘려 받는다(스트리밍) + 기다린 시간 표시
+       ② 연결이 끊겨도 요청 번호(rid)로 같은 답을 이어 받는다(다시 과금 없음) · 15초 동안 아무 신호가 없으면 스스로 이어 받기로 전환
+       ③ 실패하면 '다시 묻기' 버튼 · 로그인 학생은 로그인 한도(더 넉넉함)로 셈
+       ④ 수식 첨자 표시(a_n → a<sub>n</sub>, r^2 → r<sup>2</sup>) — window.nvMath 는 약점 문제·단권화도 같이 쓴다 */
+/* nvMath(이스케이프된 HTML) → 같은 HTML + <sup>/<sub>. 반드시 esc() 를 거친 문자열만 넣는다(고정 태그만 추가하고 속성은 만들지 않는다). */
+window.nvMath = function (h) {
+  if (!h) { return h; }
+  var s = String(h);
+  var SYM = { times: '×', cdot: '·', div: '÷', pm: '±', mp: '∓', le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈', infty: '∞', to: '→', rightarrow: '→', Rightarrow: '⇒', leftrightarrow: '↔', Leftrightarrow: '⇔', pi: 'π', theta: 'θ', alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', Delta: 'Δ', sigma: 'σ', Sigma: 'Σ', sum: 'Σ', int: '∫', lambda: 'λ', mu: 'μ', omega: 'ω', circ: '°', angle: '∠', triangle: '△', therefore: '∴', because: '∵', in: '∈', notin: '∉', subset: '⊂', subseteq: '⊆', cup: '∪', cap: '∩', emptyset: '∅', varnothing: '∅', lim: 'lim', log: 'log', ln: 'ln', sin: 'sin', cos: 'cos', tan: 'tan', ldots: '…', cdots: '⋯', prime: '′' };
+  /* $…$ 는 안이 수식처럼 보일 때만 벗긴다($5 … $10 같은 금액은 그대로) */
+  s = s.replace(/\$\$?([^$\n]{1,300}?)\$\$?/g, function (m, x) { return (/[\\^_={}]/.test(x) || /^[A-Za-z0-9 +\-*/().,]{1,40}$/.test(x)) ? x : m; });
+  s = s.replace(/\\(?:text|mathrm|mathbf|operatorname|boldsymbol)\{([^{}]{0,60})\}/g, '$1');
+  s = s.replace(/\\[dt]?frac\{([^{}]{1,40})\}\{([^{}]{1,40})\}/g, function (m, a, b) { return (a.length > 1 ? '(' + a + ')' : a) + '/' + (b.length > 1 ? '(' + b + ')' : b); });
+  s = s.replace(/\\sqrt\{([^{}]{1,40})\}/g, function (m, a) { return '√' + (a.length > 1 ? '(' + a + ')' : a); });
+  s = s.replace(/\\sqrt\s?(\d+|[A-Za-z])/g, '√$1');
+  s = s.replace(/\\([{}])/g, '$1').replace(/\\[,;:! ]/g, ' ');
+  s = s.replace(/\\([A-Za-z]+)/g, function (m, w) { if (Object.prototype.hasOwnProperty.call(SYM, w)) { return SYM[w]; } return /^(left|right|displaystyle|quad|qquad|big|Big|bigl|bigr)$/.test(w) ? '' : m; });
+  s = s.replace(/\^\{([^{}]{1,24})\}/g, '<sup>$1</sup>');
+  s = s.replace(/\^\(([^()]{1,24})\)/g, '<sup>$1</sup>');
+  s = s.replace(/\^(-?\d{1,4}|-?[A-Za-z](?![A-Za-z]))/g, '<sup>$1</sup>');
+  /* 아래첨자: 한 글자 기호(a_n) 또는 로그의 밑만 — fill_in 같은 낱말은 그대로 */
+  s = s.replace(/(\b(?:[A-Za-z]|log)|[)\]])_\{([^{}]{1,24})\}/g, '$1<sub>$2</sub>');
+  s = s.replace(/(\b(?:[A-Za-z]|log)|[)\]])_\(([^()]{1,24})\)/g, '$1<sub>$2</sub>');
+  s = s.replace(/(\b(?:[A-Za-z]|log))_([A-Za-z0-9]{1,3})(?![A-Za-z0-9])/g, '$1<sub>$2</sub>');
+  return s;
+};
 (function(){
   var EP="https://iwrblahmszuthemfrhmy.supabase.co/functions/v1/learn-tutor";
   var root=document.getElementById('nt-root'),launch=document.getElementById('nt-launch'),panel=document.getElementById('nt-panel'),closeb=document.getElementById('nt-close');
   var msgs=document.getElementById('nt-msgs'),typing=document.getElementById('nt-typing'),form=document.getElementById('nt-form'),input=document.getElementById('nt-input'),send=document.getElementById('nt-send');
-  var history=[],greeted=false,busy=false;
+  var hist=[],greeted=false,busy=false,cur=null;
+  var el=document.createElement('span');el.id='nt-el';typing.appendChild(el);
   function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-  function fmt(t){return esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+  function fmt(t){var h=esc(t);if(window.nvMath){h=window.nvMath(h);}return h.replace(/^#{1,4}\s*(.+)$/gm,'<b>$1</b>').replace(/^\s*-{3,}\s*$/gm,'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+  function nearBottom(){return msgs.scrollHeight-msgs.scrollTop-msgs.clientHeight<80;}
   function bubble(role,text){var d=document.createElement('div');d.className='nt-b '+(role==='user'?'u':'a');d.innerHTML=role==='user'?esc(text):fmt(text);msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
   function greet(){if(greeted)return;greeted=true;bubble('assistant','안녕하세요! 너야 AI 학습 튜터예요. 😊\n모르는 개념을 물어보세요 — 수학·국어·영어·사탐·과탐·통합사회/통합과학·내신까지 단계별로 함께 풀어드려요.');var n=document.createElement('div');n.className='nt-note';n.textContent='답을 바로 주지 않고 스스로 풀도록 이끄는 학습 튜터예요.';msgs.appendChild(n);}
-  function toggle(open){var o=open===undefined?panel.hasAttribute('hidden'):open;if(o){panel.removeAttribute('hidden');launch.style.display='none';greet();setTimeout(function(){input.focus();},60);}else{panel.setAttribute('hidden','');launch.style.display='';}}
+  function toggle(open){var o=open===undefined?panel.hasAttribute('hidden'):open;if(o){panel.removeAttribute('hidden');launch.style.display='none';greet();msgs.scrollTop=msgs.scrollHeight;setTimeout(function(){input.focus();},60);}else{panel.setAttribute('hidden','');launch.style.display='';}}
   launch.addEventListener('click',function(){toggle(true);});
   closeb.addEventListener('click',function(){toggle(false);});
   input.addEventListener('input',function(){input.style.height='auto';input.style.height=Math.min(input.scrollHeight,96)+'px';});
-  input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
-  form.addEventListener('submit',function(e){e.preventDefault();var q=input.value.trim();if(!q||busy)return;busy=true;send.disabled=true;bubble('user',q);input.value='';input.style.height='auto';typing.removeAttribute('hidden');msgs.scrollTop=msgs.scrollHeight;
-    fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q,history:history})})
-    .then(function(r){return r.json();})
-    .then(function(d){typing.setAttribute('hidden','');var t=(d&&d.text)?d.text:'죄송해요, 지금은 답변을 불러오지 못했어요. 잠시 후 다시 물어봐 주세요.';bubble('assistant',t);history.push({role:'user',content:q});history.push({role:'assistant',content:t});if(history.length>16)history=history.slice(-16);})
-    .catch(function(){typing.setAttribute('hidden','');bubble('assistant','연결이 잠시 불안정해요. 다시 한 번 물어봐 주세요.');})
-    .finally(function(){busy=false;send.disabled=false;input.focus();});
-  });
+  input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();form.requestSubmit();}});
+
+  function uuid(){try{if(window.crypto&&crypto.randomUUID){return crypto.randomUUID();}}catch(e){}var b=new Uint8Array(16);crypto.getRandomValues(b);b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;var h=Array.prototype.map.call(b,function(x){return (x+256).toString(16).slice(1);}).join('');return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);}
+  function withTimeout(p,ms,fallback){return new Promise(function(res){var t=setTimeout(function(){res(fallback);},ms);p.then(function(v){clearTimeout(t);res(v);},function(){clearTimeout(t);res(fallback);});});}
+  function authHeader(){try{var sb=window.NB&&window.NB.sb;if(!sb||!window.NB.user){return Promise.resolve({});}return withTimeout(sb.auth.getSession().then(function(r){var t=r&&r.data&&r.data.session&&r.data.session.access_token;return t?{authorization:'Bearer '+t}:{};}),5000,{});}catch(e){return Promise.resolve({});}}
+  function newCtrl(){return window.AbortController?new AbortController():null;}
+  function abortCur(st){try{if(st.ctrl){st.ctrl.abort();}}catch(e){}st.ctrl=null;}
+  function secs(st){return Math.max(0,Math.round((Date.now()-st.t0)/1000));}
+  function showTyping(st){if(st.got&&!st.polling){typing.setAttribute('hidden','');return;}typing.removeAttribute('hidden');var n=secs(st);var t=st.polling?'연결이 잠깐 끊겼어요 · 답을 이어 받는 중':(st.phase==='answer'?'답을 생각하는 중':'질문을 살펴보는 중');el.textContent=t+(n>=2?' · '+n+'초':'')+(!st.polling&&n>=30?' · 조금 길어지고 있어요':'');if(nearBottom()){msgs.scrollTop=msgs.scrollHeight;}}
+  function render(st){if(st.raf){return;}st.raf=(window.requestAnimationFrame||setTimeout)(function(){st.raf=0;if(st.done&&st.final){return;}var stick=nearBottom();if(!st.bub){st.bub=bubble('assistant','');}st.bub.innerHTML=fmt(st.text);if(stick){msgs.scrollTop=msgs.scrollHeight;}});}
+  function endUi(){busy=false;send.disabled=false;}
+  function stop(st){st.done=true;st.att++;clearInterval(st.tick);clearTimeout(st.pt);abortCur(st);typing.setAttribute('hidden','');if(cur===st){cur=null;}}
+  function complete(st,text){if(st.done){return;}stop(st);st.final=true;st.text=text;if(!st.bub){st.bub=bubble('assistant',text);}else{st.bub.innerHTML=fmt(text);}msgs.scrollTop=msgs.scrollHeight;hist.push({role:'user',content:st.q});hist.push({role:'assistant',content:text});if(hist.length>16){hist=hist.slice(-16);}endUi();}
+  function fail(st,msg,noRetry){if(st.done){return;}stop(st);var d=bubble('assistant',msg);if(!noRetry){var b=document.createElement('button');b.type='button';b.className='nt-retry';b.textContent='다시 묻기';b.addEventListener('click',function(){if(busy||b.disabled){return;}b.disabled=true;ask(st.q,true);});d.appendChild(document.createElement('br'));d.appendChild(b);}msgs.scrollTop=msgs.scrollHeight;endUi();}
+  function onEvent(st,att,line){if(st.done||att!==st.att){return;}var ev;try{ev=JSON.parse(line);}catch(e){return;}
+    if(ev.t==='start'){st.started=true;}
+    else if(ev.t==='phase'){st.phase='answer';showTyping(st);}
+    else if(ev.t==='reset'){st.text='';st.got=false;if(st.bub){st.bub.innerHTML='';}showTyping(st);}
+    else if(ev.t==='d'&&typeof ev.v==='string'){st.text+=ev.v;if(!st.got){st.got=true;typing.setAttribute('hidden','');}render(st);}
+    else if(ev.t==='done'){complete(st,st.text);}
+    else if(ev.t==='err'){fail(st,ev.text||'죄송해요, 지금은 답변을 만들지 못했어요. 다시 물어봐 주세요.');}
+  }
+  function readStream(st,att,reader){var dec=new TextDecoder(),buf='';
+    function pump(){return reader.read().then(function(x){if(st.done||att!==st.att){try{reader.cancel();}catch(e){}return;}if(x.done){if(buf.trim()){onEvent(st,att,buf);}if(!st.done&&att===st.att){lost(st);}return;}st.last=Date.now();buf+=dec.decode(x.value,{stream:true});var i;while((i=buf.indexOf('\n'))>=0){var line=buf.slice(0,i);buf=buf.slice(i+1);if(line.trim()){onEvent(st,att,line);}}return pump();});}
+    return pump();
+  }
+  function finishJson(st,status,d){/* 스트리밍 전 응답(한도·오류) 또는 구버전 서버의 한 번 응답 */
+    if(status===200&&d&&d.text){complete(st,d.text);return;}
+    if(status===429){fail(st,(d&&d.text)||'질문이 너무 많아 잠시 쉬어갈게요. 조금 뒤 다시 물어봐 주세요.',true);return;}
+    fail(st,'죄송해요, 지금은 답변을 불러오지 못했어요. 다시 물어봐 주세요.');
+  }
+  function lost(st){/* 연결이 끊김: 서버는 계속 만들고 있으니 요청 번호로 이어 받는다(모델 재호출 없음) */
+    if(st.done||st.polling){return;}st.att++;abortCur(st);st.polling=true;st.p0=Date.now();st.none=0;showTyping(st);
+    var att=st.att;
+    function poll(){if(st.done||att!==st.att){return;}
+      var c=newCtrl(),to=setTimeout(function(){try{if(c){c.abort();}}catch(e){}},8000);
+      fetch(EP,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({resume:st.rid}),signal:c?c.signal:undefined}).then(function(r){return r.json();}).then(function(d){clearTimeout(to);if(st.done||att!==st.att){return;}
+        var s=d&&d.status;
+        if(s==='done'&&d.text){complete(st,d.text);return;}
+        if(s==='error'||!s){fail(st,'죄송해요, 지금은 답변을 만들지 못했어요. 다시 물어봐 주세요.');return;}
+        if(s==='none'){st.none++;if(st.none>=3){/* 서버에 닿지 않았다 → 한 번만 다시 보낸다 */if(!st.resent){resend(st);return;}fail(st,'연결이 잠시 불안정해요. 다시 한 번 물어봐 주세요.');return;}}
+        st.pt=setTimeout(poll,3000);
+      },function(){clearTimeout(to);if(!st.done&&att===st.att){st.pt=setTimeout(poll,3000);}});
+    }
+    st.pt=setTimeout(poll,1500);
+  }
+  function resend(st){clearTimeout(st.pt);st.resent=true;st.polling=false;st.started=false;st.got=false;st.text='';st.phase='route';st.rid=uuid();if(st.bub){try{st.bub.remove();}catch(e){}st.bub=null;}start(st);}
+  function start(st){var att=++st.att;abortCur(st);var ctrl=newCtrl();st.ctrl=ctrl;st.last=Date.now();showTyping(st);
+    authHeader().then(function(ah){if(st.done||att!==st.att){return null;}var h={'content-type':'application/json'};for(var k in ah){h[k]=ah[k];}st.last=Date.now();
+      return fetch(EP,{method:'POST',headers:h,body:JSON.stringify({question:st.q,history:hist,stream:true,rid:st.rid}),signal:ctrl?ctrl.signal:undefined});})
+    .then(function(r){if(!r||st.done||att!==st.att){return;}var ct=r.headers.get('content-type')||'';if(ct.indexOf('ndjson')<0||!r.body||!window.TextDecoder){return r.json().catch(function(){return null;}).then(function(d){if(!st.done&&att===st.att){finishJson(st,r.status,d);}});}return readStream(st,att,r.body.getReader());})
+    .catch(function(){if(!st.done&&att===st.att){lost(st);}});
+  }
+  function ask(q,isRetry){busy=true;send.disabled=true;
+    Array.prototype.forEach.call(msgs.querySelectorAll('.nt-retry'),function(b){b.disabled=true;});
+    if(!isRetry){bubble('user',q);}
+    var st={q:q,rid:uuid(),att:0,t0:Date.now(),last:Date.now(),text:'',phase:'route',got:false,started:false,done:false,polling:false,bub:null};cur=st;
+    st.tick=setInterval(function(){if(st.done){clearInterval(st.tick);return;}showTyping(st);
+      if(st.polling&&Date.now()-st.p0>150000){fail(st,'답을 받지 못했어요. 인터넷 연결을 확인하고 다시 물어봐 주세요.');return;}
+      /* 15초 동안 아무 신호(2.5초마다 오는 살아 있음 신호 포함)가 없으면 이어 받기로 전환 */
+      if(!st.polling&&Date.now()-st.last>15000){lost(st);}},1000);
+    start(st);
+  }
+  form.addEventListener('submit',function(e){e.preventDefault();var q=input.value.trim();if(!q||busy)return;input.value='';input.style.height='auto';ask(q,false);});
+  /* 화면으로 돌아왔을 때: 살아 있음 신호가 5초 안에 다시 오지 않으면 이어 받기로 전환(끊긴 연결을 15초까지 기다리지 않게) */
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&cur&&!cur.done&&!cur.polling){cur.last=Math.min(cur.last,Date.now()-10000);}});
   // ▶ 앱 내부 전용 게이팅: #app 이 표시(hidden 아님)일 때만 노출 — 마케팅 랜딩·로그인 화면엔 숨김
   function inApp(){var a=document.getElementById('app');return !!(a&&!a.classList.contains('hidden'));}
   function ntSync(){var on=inApp();root.style.display=on?'block':'none';if(!on){panel.setAttribute('hidden','');launch.style.display='';}}
@@ -1374,6 +1463,14 @@ try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.
   window.ntAsk=function(q){if(!q)return;if(!inApp())return;toggle(true);setTimeout(function(){input.value=q;try{input.dispatchEvent(new Event('input'));}catch(e){}form.requestSubmit();},220);};
 })();
 </script>
+<style>
+#nt-typing{flex-wrap:wrap}
+#nt-typing[hidden]{display:none!important} /* 기존 display:flex 가 hidden 속성을 덮어 대기 점 3개가 늘 움직이던 문제(기다리는 중처럼 보임) */
+#nt-el{font-size:.74rem;color:var(--muted);margin-left:6px}
+.nt-b sup,.nt-b sub{font-size:.72em;line-height:0}
+.nt-retry{margin-top:8px;border:1px solid var(--line);background:var(--mist);color:var(--d);border-radius:8px;padding:8px 12px;min-height:40px;font:inherit;font-weight:700;font-size:.84rem;cursor:pointer}
+.nt-retry:disabled{opacity:.5;cursor:default}
+</style>
 <!-- ▲▲ NEOYA AI 학습 튜터 위젯 끝 ▲▲ -->
 
 <!-- ▼▼ 앱 내부 AI 도우미 통합 버튼 — AI 상담·AI 학습 튜터 두 버튼을 하나로 접어 시야를 확보한다 (2026-09-09) ▼▼ -->
@@ -2202,6 +2299,8 @@ html.nv-appshell #nvHub button{min-width:0}
 
   function kstDate(ms) { return new Date((ms == null ? Date.now() : ms) + 324e5).toISOString().slice(0, 10); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[c]; }); }
+  /* 수식 첨자(a_n → a<sub>n</sub>, r^2 → r<sup>2</sup>) — window.nvMath 는 AI 튜터 스크립트가 정의(v1.2) */
+  function mth(s) { var h = esc(s); try { return window.nvMath ? window.nvMath(h) : h; } catch (e) { return h; } }
   function user() { return (window.NB && window.NB.user) ? window.NB.user : null; }
   function sbc() { return (window.NB && window.NB.sb) || window.SB || null; }
   function st() { return window.state || {}; }
@@ -2520,29 +2619,52 @@ html.nv-appshell #nvHub button{min-width:0}
   var DR = null, drEl = sheet('nvDrill', '약점 문제');
   async function openDrill(subject) {
     if (!isStudent()) { say('로그인한 학생 계정에서 쓸 수 있어요.'); return; }
+    stopDrPoll();
     DR = { qs: [], i: 0, right: 0, done: 0, cleared: 0, left: null, leftToday: null, phase: 'load', err: '', ans: null, busy: false, subject: subject || null };
-    renderDrill(); openSheet(drEl); fetchDrill();
+    renderDrill(); openSheet(drEl); fetchDrill(false);
   }
-  async function fetchDrill() {
-    DR.phase = 'load'; DR.err = ''; renderDrill();
+  /* v1.2: 문제 만들기(20~60초)를 한 번의 긴 요청으로 기다리지 않는다 — 서버가 뒤에서 만들고(bg) 앱은 3초마다 확인(peek).
+     휴대폰 연결이 끊기거나 화면을 닫아도 만든 문제는 남고, 다시 열면 그 문제부터 나온다. */
+  var drPoll = null;
+  function drOpen() { return drEl.classList.contains('on'); }
+  function stopDrPoll() { if (drPoll) { clearTimeout(drPoll); drPoll = null; } }
+  function drillErr(code) { return code === 401 ? '로그인이 풀렸어요. 다시 로그인해 주세요.' : code === 429 ? '지금 문제를 만드는 사람이 많아요. 잠시 후 다시 시도해 주세요.' : '문제를 만들지 못했어요. 잠시 후 다시 시도해 주세요.'; }
+  function schedulePeek(my) {
+    if (DR !== my || my.phase !== 'load') { return; }
+    if (Date.now() - my.t0 > 180000) { my.phase = 'err'; my.err = '문제를 만드는 데 너무 오래 걸려요. 잠시 후 다시 시도해 주세요.'; renderDrill(); return; }
+    stopDrPoll();
+    drPoll = setTimeout(function () { drPoll = null; if (DR === my && my.phase === 'load' && drOpen()) { fetchDrill(true); } }, 3000);
+    renderDrill();
+  }
+  async function fetchDrill(peek) {
+    if (!peek) { stopDrPoll(); DR.phase = 'load'; DR.err = ''; DR.t0 = Date.now(); renderDrill(); }
+    var my = DR;
     try {
-      var r = await sbc().functions.invoke('weak-drill', { body: { count: 5, subject: DR.subject } });
+      var r = await sbc().functions.invoke('weak-drill', { body: peek ? { peek: true } : { count: 5, subject: DR.subject, bg: true } });
+      if (DR !== my || my.phase !== 'load') { return; }
       var d = r.data;
       if (r.error) {
         var code = 0; try { code = r.error.context && r.error.context.status; } catch (e0) { }
-        DR.phase = 'err'; DR.err = code === 401 ? '로그인이 풀렸어요. 다시 로그인해 주세요.' : code === 429 ? '지금 문제를 만드는 사람이 많아요. 잠시 후 다시 시도해 주세요.' : '문제를 만들지 못했어요. 잠시 후 다시 시도해 주세요.';
-        renderDrill(); return;
+        if (!code) { schedulePeek(my); return; } /* 연결 끊김: 서버는 만들고 있을 수 있다 → 확인을 이어 간다 */
+        my.phase = 'err'; my.err = drillErr(code); renderDrill(); return;
       }
-      DR.leftToday = d && d.left_today != null ? d.left_today : null;
-      if (d && d.cap) { DR.phase = 'cap'; DR.attemptCap = !!d.attempt_cap; renderDrill(); return; }
-      if (d && d.empty) { DR.phase = 'empty'; renderDrill(); return; }
-      DR.qs = (d && d.questions) || []; DR.i = 0; DR.ans = null;
-      DR.phase = DR.qs.length ? 'q' : 'empty'; renderDrill();
-    } catch (err) { DR.phase = 'err'; DR.err = errText(err, '문제를 만들지 못했어요. 잠시 후 다시 시도해 주세요.'); renderDrill(); }
+      my.leftToday = d && d.left_today != null ? d.left_today : null;
+      if (d && d.cap) { my.phase = 'cap'; my.attemptCap = !!d.attempt_cap; renderDrill(); return; }
+      if (d && d.empty) { my.phase = 'empty'; renderDrill(); return; }
+      var qs = (d && d.questions) || [];
+      if (qs.length) { my.qs = qs; my.i = 0; my.ans = null; my.phase = 'q'; renderDrill(); return; }
+      if (d && d.generating) { my.idle = 0; schedulePeek(my); return; }
+      /* '만드는 중 아님 + 문제 없음'이 두 번 연속일 때만 실패로 본다(저장 직전 틈에 확인한 경우 대비) */
+      if (peek) { my.idle = (my.idle || 0) + 1; if (my.idle < 2) { schedulePeek(my); return; } my.phase = 'err'; my.err = '문제를 만들지 못했어요. 다시 시도해 주세요.'; renderDrill(); return; }
+      my.phase = 'empty'; renderDrill();
+    } catch (err) {
+      if (DR !== my || my.phase !== 'load') { return; }
+      schedulePeek(my);
+    }
   }
   function renderDrill() {
     var box = inner(drEl);
-    if (DR.phase === 'load') { box.innerHTML = head('약점 문제', '남은 모르는 개념으로 문제를 만드는 중…') + '<p class="nvShLead">5회독 뒤에도 남은 개념만 골라 4지선다로 만들어요. 보통 20초 안팎, 길면 1분쯤 걸려요.</p>'; return; }
+    if (DR.phase === 'load') { var sec = DR.t0 ? Math.round((Date.now() - DR.t0) / 1000) : 0; box.innerHTML = head('약점 문제', '남은 모르는 개념으로 문제를 만드는 중…' + (sec >= 3 ? ' ' + sec + '초' : '')) + '<p class="nvShLead">5회독 뒤에도 남은 개념만 골라 4지선다로 만들어요. 보통 20~40초, 길면 1분쯤 걸려요. 화면을 닫아도 만든 문제는 남아서, 다시 열면 바로 풀 수 있어요.</p>'; return; }
     if (DR.phase === 'err') { box.innerHTML = head('약점 문제', '') + '<div class="nvMsg bad" role="alert">' + esc(DR.err) + '</div><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="retry">다시 시도</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
     if (DR.phase === 'cap' && DR.attemptCap) { box.innerHTML = head('오늘은 문제를 더 만들 수 없어요', '') + '<p class="nvShLead">오늘 만들 수 있는 횟수를 다 썼어요. 내일 남은 개념으로 다시 만들어 드려요. 그동안 단권화를 읽고 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
     if (DR.phase === 'cap') { box.innerHTML = head('오늘 약점 문제를 다 풀었어요', '하루 10문항') + '<p class="nvShLead">내일 남은 개념으로 새로 만들어 드려요. 오늘은 단권화를 다시 읽고, 왜 몰랐는지 한 줄씩 적어 두세요.</p><div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="dan">단권화 보기</button><button type="button" class="nvBtn" data-a="bank">과목 문제은행 풀기</button><button type="button" class="nvBtn" data-a="close">닫기</button></div>'; return; }
@@ -2558,13 +2680,13 @@ html.nv-appshell #nvHub button{min-width:0}
     var opts = Array.isArray(q.options) ? q.options : [];
     var A = DR.ans;
     box.innerHTML = head('약점 문제 ' + (DR.i + 1) + ' / ' + DR.qs.length, '')
-      + '<span class="nvQTag">' + esc(q.subject) + ' · ' + esc(q.concept) + '</span>'
-      + '<p class="nvQ">' + esc(q.question) + '</p>'
+      + '<span class="nvQTag">' + esc(q.subject) + ' · ' + mth(q.concept) + '</span>'
+      + '<p class="nvQ">' + mth(q.question) + '</p>'
       + opts.map(function (o, k) {
         var cls = A ? (k === A.answer ? ' ok' : (k === A.sel && !A.correct ? ' no' : '')) : '';
-        return '<button type="button" class="nvOpt' + cls + '" data-o="' + k + '"' + (A || DR.busy ? ' disabled' : '') + '><b>' + ['①', '②', '③', '④'][k] + '</b>' + esc(o) + (A && k === A.answer ? ' (정답)' : '') + (A && k === A.sel && !A.correct ? ' (내 답)' : '') + '</button>';
+        return '<button type="button" class="nvOpt' + cls + '" data-o="' + k + '"' + (A || DR.busy ? ' disabled' : '') + '><b>' + ['①', '②', '③', '④'][k] + '</b>' + mth(o) + (A && k === A.answer ? ' (정답)' : '') + (A && k === A.sel && !A.correct ? ' (내 답)' : '') + '</button>';
       }).join('')
-      + (A ? '<div class="nvMsg ' + (A.correct ? 'good' : 'bad') + '" role="status">' + (A.correct ? '정답이에요. ' : '틀렸어요. ') + esc(A.explanation || '') + (A.status === 'cleared' ? ' 이 개념은 이제 단권화에서 지웠어요.' : A.correct ? ' 다른 날 한 번 더 맞히면 지워져요.' : ' 단권화에 남겨 둘게요.') + '</div>'
+      + (A ? '<div class="nvMsg ' + (A.correct ? 'good' : 'bad') + '" role="status">' + (A.correct ? '정답이에요. ' : '틀렸어요. ') + mth(A.explanation || '') + (A.status === 'cleared' ? ' 이 개념은 이제 단권화에서 지웠어요.' : A.correct ? ' 다른 날 한 번 더 맞히면 지워져요.' : ' 단권화에 남겨 둘게요.') + '</div>'
         + '<div class="nvResBtns"><button type="button" class="nvBtn nvPri" data-a="next">' + (DR.i + 1 < DR.qs.length ? '다음 문제' : '결과 보기') + '</button></div>' : '')
       + (DR.err ? '<div class="nvMsg bad" role="alert">' + esc(DR.err) + '</div>' : '');
   }
@@ -2584,7 +2706,7 @@ html.nv-appshell #nvHub button{min-width:0}
       DR.busy = false; delete drEl.dataset.busy; renderDrill(); return;
     }
     if (a === 'next') { DR.i++; DR.ans = null; if (DR.i >= DR.qs.length) { DR.phase = 'end'; loadLoop(); } renderDrill(); return; }
-    if (a === 'more' || a === 'retry') { fetchDrill(); return; }
+    if (a === 'more' || a === 'retry') { fetchDrill(false); return; }
     if (a === 'lec') { closeSheet(drEl); openLecture(); return; }
     if (a === 'bank') { closeSheet(drEl); if (window.go) { window.go('quiz'); } return; }
     if (a === 'dan') { closeSheet(drEl); refreshAll(); if (window.go) { window.go('dan'); } return; }
@@ -2604,7 +2726,7 @@ html.nv-appshell #nvHub button{min-width:0}
         var label = { keep: '단권화 확정', cand: '후보', 'new': '확인 전', gone: '지움' }[k];
         var src = { lecture: '강의', review: '회독 중 추가', quiz: '퀴즈 오답', manual: '직접 추가' }[d.source] || '';
         return '<div class="nvDz ' + k + '"><div class="nvDzTop"><span>' + esc(d.subject) + (src ? ' · ' + src : '') + '</span><span class="nvDzB">' + label + '</span></div>'
-          + '<div class="nvDzC">' + esc(d.concept) + '</div>'
+          + '<div class="nvDzC">' + mth(d.concept) + '</div>'
           + '<div class="nvDzMeta">' + dots(m, d.study_item_id) + (qn.length ? '<span>약점 문제 ' + qo + '/' + qn.length + ' 정답</span>' : '') + '</div>'
           + (k === 'gone' ? '' : '<input class="nvIn nvDzNote" data-note="' + d.id + '" maxlength="120" placeholder="왜 몰랐나 · 핵심 한 줄로 압축" value="' + esc(d.note || '') + '" aria-label="' + esc(d.concept) + ' 메모">')
           + '<div class="nvDzAct">' + (k === 'keep' ? '<label><input type="checkbox" data-fin="' + d.id + '"' + (d.final_check ? ' checked' : '') + '> 시험 전 최종 확인</label>' : '')
@@ -2931,7 +3053,7 @@ html.nv-appshell #nvHub button{min-width:0}
 
   /* 안드로이드 뒤로가기용: 맨 위 시트를 닫는다(저장 중이면 닫지 않고 true — 뒤로가기를 소비만 한다) */
   function closeTop() { var on = document.querySelectorAll('.nvSheet.on'); var t = on[on.length - 1]; if (!t) { return false; } if (!t.dataset.busy) { closeSheet(t); } return true; }
-  window.nvLoop = { version: 'loop-v1.1-2026-09-27', reload: loadLoop, openLecture: openLecture, openDrill: openDrill, openCheck: openCheck, openManual: openManual, counts: counts, closeTop: closeTop };
+  window.nvLoop = { version: 'loop-v1.2-2026-09-27', reload: loadLoop, openLecture: openLecture, openDrill: openDrill, openCheck: openCheck, openManual: openManual, counts: counts, closeTop: closeTop };
 })();
 </script>
 <!-- ▲▲ 코어 루프 v1 끝 ▲▲ -->
@@ -3048,6 +3170,7 @@ html.nv-appshell #nvHub button{min-width:0}
   /* ── 안드로이드 뒤로가기: 열린 창 닫기 → 첫 화면 → 두 번 눌러 종료 ── */
   var busyBacks = 0, busyAt = 0;
   function closeTop() {
+    try { if (window.nvPwReset && window.nvPwReset.isOpen()) { window.nvPwReset.close(); return true; } } catch (e0) { } /* 새 비밀번호 창(앱 즉시 수정 v1) */
     var on = document.querySelectorAll('.nvSheet.on'), top = on[on.length - 1];
     if (top && top.dataset.busy) { if (Date.now() - busyAt > 3000) { busyBacks = 0; } busyAt = Date.now(); busyBacks++; if (busyBacks < 2) { return true; } } /* 저장 중: 한 번은 기다리고, 연속 두 번째는 통과 */
     else { busyBacks = 0; try { if (top && window.nvLoop && window.nvLoop.closeTop && window.nvLoop.closeTop()) { return true; } } catch (e) { } }
@@ -3145,5 +3268,184 @@ html.nv-appshell #nvHub button{min-width:0}
 })();
 </script>
 <!-- ▲▲ 앱 전용 v1 끝 ▲▲ -->
+<!-- ▼▼ 앱 즉시 수정 v1 (2026-09-27 · DEV D04 · CVO 직접 사용 피드백): 비밀번호 찾기 · 체험 단권화 폰 폭 넘침 · 수식 첨자 스타일 ▼▼ -->
+<style>
+/* 체험(샘플) 단권화: 폰 폭에서 오른쪽 상태 표시가 화면 밖으로 나가 화면 전체가 가로로 밀리던 문제 */
+@media (max-width:480px){
+  .dz{position:relative;align-items:flex-start;padding-top:34px}
+  .dz > .tagx{position:absolute;top:9px;right:10px}
+  .dz .t{min-width:0}
+  .dz .t input{max-width:100%;box-sizing:border-box}
+}
+/* 수식 첨자 — 줄 간격이 흔들리지 않게 */
+#nvDrill sup,#nvDrill sub,.nvDzC sup,.nvDzC sub,.nvQTag sup,.nvQTag sub{font-size:.72em;line-height:0}
+/* 비밀번호 찾기 */
+#nvForgot{margin-top:10px;font-size:.8rem;text-align:center}
+#nvForgot button,.nvFgLink{background:none;border:none;padding:6px 4px;min-height:36px;font:inherit;color:var(--mid);font-weight:700;cursor:pointer;text-decoration:underline}
+#signupExtra:not(.hidden) ~ #nvForgot{display:none}
+.nvFgLead{font-size:.85rem;color:var(--muted);line-height:1.6;text-align:center;margin:6px 0 12px}
+.nvFgLab{display:block;text-align:left;font-size:.78rem;font-weight:700;color:#3E4C59;margin:8px 0 4px}
+.nvFgMsg{font-size:.8rem;min-height:18px;margin:8px 0 0;text-align:center;line-height:1.5}
+.nvFgBox{text-align:left;margin:12px 0 0;background:#FAFBFC;border:1px solid var(--border);border-radius:12px;padding:11px 13px;font-size:.82rem;color:#3E4C59;line-height:1.6}
+.nvFgRow{display:flex;gap:7px;margin-top:8px}
+.lbox .nvFgRow input{flex:1;min-width:0;width:auto;text-align:center;font-size:1.05rem;letter-spacing:.15em;font-weight:700;margin:0}
+.lbox .nvFgRow .btn{flex:none;width:auto;white-space:nowrap;padding:0 18px;min-height:44px}
+#nvPwSheet{position:fixed;inset:0;z-index:100001;display:none;align-items:center;justify-content:center;background:rgba(31,41,51,.45);padding:16px}
+#nvPwSheet.on{display:flex}
+#nvPwSheet .nvPwBox{background:#FFFFFF;border-radius:12px;width:100%;max-width:380px;padding:20px 18px;box-shadow:0 18px 50px rgba(26,58,92,.28);color:#1F2933;font-family:inherit}
+#nvPwSheet h2{font-size:1.08rem;margin:0 0 6px;color:#1A3A5C}
+#nvPwSheet p{font-size:.84rem;color:#616E7C;margin:0 0 10px;line-height:1.55}
+#nvPwSheet input{width:100%;box-sizing:border-box;margin:0 0 8px;padding:12px 13px;border:1px solid var(--border);border-radius:8px;font-size:.94rem;font-family:inherit;color:#1F2933}
+#nvPwSheet input:focus{border-color:var(--mid);outline:none;box-shadow:0 0 0 3px rgba(43,95,139,.13)}
+#nvPwSheet .nvPwBtns{display:flex;gap:8px;margin-top:6px}
+#nvPwSheet .nvPwBtns button{flex:1;min-height:44px}
+#nvPwSheet .nvPwLater{border:1px solid #E4E7EB;background:#FFFFFF;border-radius:12px;color:#3E4C59;font:inherit;font-weight:700;cursor:pointer}
+</style>
+<script>
+(function () {
+  'use strict';
+  /* 비밀번호 찾기(이메일 가입자) — 로그인 화면의 '비밀번호를 잊으셨나요?' → 재설정 메일 → 메일 링크(또는 6자리 번호) → 새 비밀번호 저장
+     메일 링크로 돌아오면 주소에 type=recovery 가 붙는다. supabase 가 주소를 지우기 전에 여기서 먼저 읽어 둔다(이 스크립트가 모듈보다 먼저 실행). */
+  var H = String(location.hash || ''), Q = String(location.search || '');
+  var FROM_RESET = /[?&]reset=1/.test(Q);
+  var RECOVERY = /(^|[#&])type=recovery(&|$)/.test(H) && /(^|[#&])access_token=/.test(H);
+  var LINK_ERR = FROM_RESET && /error(_code)?=/.test(H + '&' + Q);
+  var EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var pwOpened = false, orig = null, cool = null;
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' }[c]; }); }
+  function sb() { return window.NB && window.NB.sb; }
+  function box() { return document.querySelector('#login .lbox'); }
+  function say(id, t, bad) { var m = $(id); if (m) { m.textContent = t; m.style.color = bad ? 'var(--c1)' : 'var(--c3)'; } }
+  function cleanUrl() { try { if (FROM_RESET || /type=recovery|error_code=/.test(location.hash)) { history.replaceState(history.state, '', location.pathname); } } catch (e) { } }
+  function toast(t) { try { if (window.toast) { window.toast(t); } } catch (e) { } }
+
+  window.nvForgot = function (note) {
+    var b = box(); if (!b) { return; }
+    if (orig == null) { orig = b.innerHTML; }
+    var em = ''; try { em = ($('email') && $('email').value.trim()) || ''; } catch (e) { }
+    b.innerHTML = '<div class="logo">너야<span class="n"> NEOYA</span></div>'
+      + '<div style="font-weight:800;font-size:1.1rem;color:var(--deep);text-align:center;margin:10px 0 2px">비밀번호 찾기</div>'
+      + '<div class="nvFgLead">가입한 이메일을 적으면 비밀번호를 새로 정하는 메일을 보내드려요.</div>'
+      + (note ? '<div class="nvFgMsg" style="color:var(--c1)" role="alert">' + esc(note) + '</div>' : '')
+      + '<label class="nvFgLab" for="nvFgEmail">이메일</label>'
+      + '<input id="nvFgEmail" type="email" autocomplete="email" placeholder="you@example.com" value="' + esc(em) + '"/>'
+      + '<button type="button" class="btn" id="nvFgSend" style="width:100%;margin-top:10px;font-size:.95rem;padding:13px">재설정 메일 보내기</button>'
+      + '<div class="nvFgMsg" id="nvFgMsg" role="status"></div>'
+      + '<div class="nvFgBox" id="nvFgNext" hidden>메일 속 <b>[비밀번호 재설정]</b> 링크를 누르면 새 비밀번호를 정하는 화면이 열려요. 메일이 안 보이면 <b>스팸함</b>을 확인해 주세요.'
+      + '<div style="margin-top:10px;font-size:.78rem;color:var(--muted)">메일에 <b>6자리 인증번호</b>가 있다면 여기에 입력하세요</div>'
+      + '<div class="nvFgRow"><input id="nvFgOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6자리 숫자" aria-label="인증번호 6자리"/><button type="button" class="btn" id="nvFgVerify">확인</button></div></div>'
+      + '<div class="nvFgBox">카카오·구글·네이버로 가입했다면 비밀번호가 없어요. 로그인 화면에서 그 버튼으로 들어오세요.</div>'
+      + '<div style="text-align:center;margin-top:10px"><button type="button" class="nvFgLink" id="nvFgBack">← 로그인으로 돌아가기</button></div>';
+    $('nvFgSend').addEventListener('click', sendMail);
+    $('nvFgBack').addEventListener('click', back);
+    $('nvFgVerify').addEventListener('click', verifyCode);
+    $('nvFgOtp').addEventListener('input', function () { this.value = this.value.replace(/[^0-9]/g, ''); if (this.value.length === 6) { verifyCode(); } });
+    try { window.scrollTo(0, 0); } catch (e) { }
+  };
+  function back() {
+    var b = box(); if (!b || orig == null) { return; }
+    var em = $('nvFgEmail') ? $('nvFgEmail').value.trim() : '';
+    b.innerHTML = orig; orig = null;
+    if (cool) { clearInterval(cool); cool = null; }
+    if (em && $('email')) { $('email').value = em; try { if (window.emlChk) { window.emlChk(); } } catch (e) { } }
+  }
+  async function sendMail() {
+    var c = sb(), btn = $('nvFgSend'), em = ($('nvFgEmail') && $('nvFgEmail').value.trim()) || '';
+    if (!c || !btn || btn.disabled) { return; }
+    if (!EMAIL_RX.test(em)) { say('nvFgMsg', '가입한 이메일을 정확히 적어 주세요.', 1); return; }
+    btn.disabled = true; say('nvFgMsg', '보내는 중…');
+    var r;
+    try { r = await c.auth.resetPasswordForEmail(em, { redirectTo: location.origin + '/?reset=1' }); } catch (e) { r = { error: e }; }
+    if (r && r.error) {
+      var st = r.error.status || 0, code = String(r.error.code || '');
+      say('nvFgMsg', (st === 429 || /rate/.test(code)) ? '메일을 너무 자주 요청했어요. 1분쯤 뒤에 다시 눌러 주세요.' : '메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.', 1);
+      btn.disabled = false; return;
+    }
+    say('nvFgMsg', '가입된 이메일이면 재설정 메일이 곧 도착해요. 몇 분 걸릴 수 있어요.');
+    var nx = $('nvFgNext'); if (nx) { nx.hidden = false; }
+    var t = 60; btn.textContent = '다시 보내기 (' + t + '초)';
+    if (cool) { clearInterval(cool); }
+    cool = setInterval(function () { var b2 = $('nvFgSend'); if (!b2) { clearInterval(cool); cool = null; return; } t--; if (t <= 0) { clearInterval(cool); cool = null; b2.disabled = false; b2.textContent = '재설정 메일 다시 보내기'; } else { b2.textContent = '다시 보내기 (' + t + '초)'; } }, 1000);
+  }
+  async function verifyCode() {
+    var c = sb(), inp = $('nvFgOtp'), em = ($('nvFgEmail') && $('nvFgEmail').value.trim()) || '', v = $('nvFgVerify');
+    var code = inp ? inp.value.trim() : '';
+    if (!c || (v && v.disabled)) { return; }
+    if (code.length !== 6) { say('nvFgMsg', '6자리 숫자를 입력해 주세요.', 1); return; }
+    if (!EMAIL_RX.test(em)) { say('nvFgMsg', '위에 가입한 이메일을 적어 주세요.', 1); return; }
+    if (v) { v.disabled = true; }
+    say('nvFgMsg', '확인 중…');
+    var r; try { r = await c.auth.verifyOtp({ email: em, token: code, type: 'recovery' }); } catch (e) { r = { error: e }; }
+    if (v) { v.disabled = false; }
+    if (r && r.error) { say('nvFgMsg', '인증번호가 맞지 않거나 만료됐어요. 메일을 다시 받아 주세요.', 1); return; }
+    say('nvFgMsg', '확인됐어요. 새 비밀번호를 정해 주세요.');
+    openPwSheet();
+  }
+
+  /* 새 비밀번호 정하기 — 메일 링크·인증번호로 들어온 뒤 */
+  function openPwSheet() {
+    if (pwOpened) { return; } pwOpened = true;
+    var s = $('nvPwSheet');
+    if (!s) {
+      s = document.createElement('div'); s.id = 'nvPwSheet';
+      s.innerHTML = '<div class="nvPwBox" role="dialog" aria-modal="true" aria-labelledby="nvPwT">'
+        + '<h2 id="nvPwT">새 비밀번호 정하기</h2><p>8자 이상, 영문과 숫자를 함께 넣어 주세요. 다음부터 이 비밀번호로 로그인해요.</p>'
+        + '<input id="nvPw1" type="password" autocomplete="new-password" placeholder="새 비밀번호" aria-label="새 비밀번호"/>'
+        + '<input id="nvPw2" type="password" autocomplete="new-password" placeholder="새 비밀번호 확인" aria-label="새 비밀번호 확인"/>'
+        + '<div class="nvFgMsg" id="nvPwMsg" role="alert" style="text-align:left;margin:0 0 6px"></div>'
+        + '<div class="nvPwBtns"><button type="button" class="nvPwLater" id="nvPwLater">나중에</button><button type="button" class="btn" id="nvPwSave">새 비밀번호 저장</button></div></div>';
+      document.body.appendChild(s);
+      $('nvPwSave').addEventListener('click', savePw);
+      $('nvPwLater').addEventListener('click', function () { closePw(); if (!enterApp()) { toast('비밀번호는 그대로예요. 로그인 화면의 비밀번호 찾기로 언제든 바꿀 수 있어요.'); } });
+      $('nvPw2').addEventListener('keydown', function (e) { if (e.key === 'Enter') { savePw(); } });
+    }
+    s.classList.add('on');
+    setTimeout(function () { try { $('nvPw1').focus(); } catch (e) { } }, 60);
+  }
+  function closePw() { var s = $('nvPwSheet'); if (s) { s.classList.remove('on'); } pwOpened = false; cleanUrl(); }
+  async function savePw() {
+    var c = sb(), btn = $('nvPwSave'), p1 = ($('nvPw1') || {}).value || '', p2 = ($('nvPw2') || {}).value || '';
+    if (!c || !btn || btn.disabled) { return; }
+    if (p1.length < 8 || !/[A-Za-z]/.test(p1) || !/[0-9]/.test(p1)) { say('nvPwMsg', '8자 이상, 영문과 숫자를 함께 넣어 주세요.', 1); return; }
+    if (p1 !== p2) { say('nvPwMsg', '두 칸의 비밀번호가 서로 달라요.', 1); return; }
+    btn.disabled = true; say('nvPwMsg', '저장 중…');
+    var r; try { r = await c.auth.updateUser({ password: p1 }); } catch (e) { r = { error: e }; }
+    btn.disabled = false;
+    if (r && r.error) {
+      var code = String(r.error.code || ''), m = String(r.error.message || '');
+      say('nvPwMsg', /same_password|different from the old/i.test(code + m) ? '지금 쓰는 비밀번호와 다른 비밀번호로 정해 주세요.'
+        : /weak_password/i.test(code) ? '더 강한 비밀번호로 정해 주세요(8자 이상, 영문+숫자).'
+        : /session|jwt|auth/i.test(code + m) ? '링크가 만료됐어요. 비밀번호 찾기를 다시 해 주세요.'
+        : '저장하지 못했어요. 잠시 후 다시 시도해 주세요.', 1);
+      return;
+    }
+    closePw();
+    try { sessionStorage.setItem('nv_pw_changed', '1'); } catch (e) { }
+    if (!enterApp()) { toast('비밀번호를 바꿨어요. 다음부터 새 비밀번호로 로그인하세요.'); }
+  }
+  /* 인증번호로 복구한 경우엔 로그인 상태만 있고 앱이 아직 안 열렸다 → 앱으로 다시 들어간다(세션으로 자동 로그인) */
+  function enterApp() { if (window.NB && window.NB.user) { return false; } try { location.replace(location.origin + '/app'); return true; } catch (e) { return false; } }
+  try { if (sessionStorage.getItem('nv_pw_changed') === '1') { sessionStorage.removeItem('nv_pw_changed'); setTimeout(function () { toast('비밀번호를 바꿨어요. 다음부터 새 비밀번호로 로그인하세요.'); }, 2500); } } catch (e) { }
+
+  /* 메일 링크로 들어왔을 때 */
+  function whenReady(fn, n) { n = n || 0; if (sb()) { fn(sb()); return; } if (n > 150) { return; } setTimeout(function () { whenReady(fn, n + 1); }, 100); }
+  whenReady(function (c) {
+    try { c.auth.onAuthStateChange(function (ev) { if (ev === 'PASSWORD_RECOVERY') { setTimeout(openPwSheet, 300); } }); } catch (e) { }
+    if (RECOVERY) { c.auth.getSession().then(function (r) { if (r && r.data && r.data.session) { setTimeout(openPwSheet, 300); } }, function () { }); }
+    else if (LINK_ERR) {
+      cleanUrl();
+      c.auth.getSession().then(function (r) {
+        if (r && r.data && r.data.session) { return; }
+        try { if (window.showLogin) { window.showLogin(); } } catch (e) { }
+        window.nvForgot('링크가 만료됐거나 이미 사용됐어요. 재설정 메일을 다시 받아 주세요.');
+      }, function () { });
+    }
+  });
+  /* 안드로이드 뒤로 버튼(앱 전용 v1 closeTop)이 이 창을 먼저 닫게 */
+  window.nvPwReset = { open: openPwSheet, forgot: window.nvForgot, isOpen: function () { var s0 = $('nvPwSheet'); return !!(s0 && s0.classList.contains('on')); }, close: function () { var l = $('nvPwLater'); if (l) { l.click(); } }, version: 'fix-v1-2026-09-27' };
+})();
+</script>
+<!-- ▲▲ 앱 즉시 수정 v1 끝 ▲▲ -->
 <script src="/native-bridge.js" defer></script>
 </body></html>
