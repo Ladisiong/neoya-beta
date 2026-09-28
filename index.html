@@ -324,8 +324,8 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
   <a class="logo" href="#top"><svg viewBox="0 -4 32 36"><circle cx="10" cy="0.6" r="2.4" fill="#1A3A5C"/><path d="M2 13c4 0 4-6 8-6s4 6 8 6 4-6 8-6" stroke="#1A3A5C" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M2 21c4 0 4-5 8-5s4 5 8 5 4-5 8-5" stroke="#2B5F8B" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>너야 NEOYA</a>
   <nav class="nav-links">
     <a href="#how">작동 방식</a><a href="#features">기능</a><a href="#pricing">요금</a><a href="#freebie">무료 학습자료</a><a href="/learn">학습법</a><a href="#contact">문의</a>
-    <a href="#login" onclick="return showLogin(event)">로그인</a>
-    <a class="btn btn-primary" href="#login" onclick="return showLogin(event)">무료 회원가입 →</a>
+    <a href="#login" data-nv-auth="login" onclick="return showLogin(event)">로그인</a>
+    <a class="btn btn-primary" href="#login" data-nv-auth="cta" data-nv-in="내 학습으로 →" onclick="return showLogin(event)">무료 회원가입 →</a>
   </nav>
 </div></header>
 <div id="nvBetaBar" role="note">
@@ -342,7 +342,7 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
       <h1 class="reveal">인강은 들었는데,<br/>점수는 왜 <span class="hl">그대로</span>일까</h1>
       <p class="sub reveal">이유는 하나예요 — 복습을 안 해서. '다음에 하자'가 결국 안 하게 되죠. 너야는 지금 듣는 <b>인강 진도부터 '언제 뭘 복습할지'를 대신 정해</b> 챙겨줍니다. 강의는 그대로, 복습 관리는 너야가.</p>
       <div class="hero-cta reveal">
-        <a class="btn btn-primary" href="#login" onclick="return showLogin(event)">무료로 시작하기 →</a>
+        <a class="btn btn-primary" href="#login" data-nv-auth="cta" data-nv-in="내 학습 이어가기 →" onclick="return showLogin(event)">무료로 시작하기 →</a>
         <a class="btn btn-ghost" href="#how">어떻게 작동하나요?</a>
       </div>
       <p class="microcopy reveal">이메일·간편가입으로 30초 가입 · PC·노트북 바로 이용 · 태블릿·폰은 홈 화면에 추가하면 앱처럼 · 언제든 해지</p>
@@ -501,7 +501,7 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
   </div>
 </div></footer>
 
-<div class="sticky-cta"><a class="btn btn-primary" href="#login" onclick="return showLogin(event)">💻 무료로 너야 시작하기</a></div>
+<div class="sticky-cta"><a class="btn btn-primary" href="#login" data-nv-auth="cta" data-nv-in="내 학습 이어가기 →" onclick="return showLogin(event)">💻 무료로 너야 시작하기</a></div>
 
 
 
@@ -579,7 +579,7 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
 </div></div>
 <div id="app" class="hidden">
   <div class="top">
-    <div class="logo">너야<span style="color:var(--mid)"> NEOYA</span></div>
+    <div class="logo" role="link" tabindex="0" title="너야 홈으로" style="cursor:pointer" onclick="nbGoHome()" onkeydown="if(event.key==='Enter')nbGoHome()">너야<span style="color:var(--mid)"> NEOYA</span></div>
     <div class="stat">
       <span class="lvl" id="lvl">Lv.4</span><span class="pts" id="pts">1,240P</span><button id="logoutBtn" class="hidden" onclick="nbLogout()" style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:4px 9px;font-size:.72rem;cursor:pointer;color:var(--muted)">로그아웃</button><button id="sampleBtn" class="hidden" onclick="toggleSample()" style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:4px 9px;font-size:.72rem;cursor:pointer;color:var(--muted);margin-left:6px">🔎 샘플 보기</button>
       <div><div style="font-size:.7rem">XP <span id="xpv">320</span>/500</div><div class="xpbar"><div class="xpfill" id="xpf" style="width:64%"></div></div></div>
@@ -592,9 +592,12 @@ h2.sec{font-size:1.12rem;color:var(--deep);margin:4px 0 3px}
 <div class="toast" id="toast"></div>
 <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-label="기록" onclick="if(event.target===this)closeHist()"><div class="mbox" id="mbox"></div></div>
 <script>
-function showLogin(e){if(e){e.preventDefault();}var h=document.getElementById('home');if(h)h.classList.add('hidden');var l=document.getElementById('login');if(l)l.classList.remove('hidden');window.scrollTo(0,0);return false;}
+function showLogin(e){if(e){e.preventDefault();}if(window.NB&&window.NB.user&&window.nbEnterApp){window.nbEnterApp();return false;}var h=document.getElementById('home');if(h)h.classList.add('hidden');var l=document.getElementById('login');if(l)l.classList.remove('hidden');window.scrollTo(0,0);return false;}
 function showHome(e){if(e){e.preventDefault();}var l=document.getElementById('login');if(l)l.classList.add('hidden');var h=document.getElementById('home');if(h)h.classList.remove('hidden');window.scrollTo(0,0);return false;}
 window.showLogin=showLogin;window.showHome=showHome;
+/* 앱 → 홈: 설치 앱(TWA·iOS·홈 화면 추가)에서는 마케팅 홈으로 나가지 않는다 */
+function nbGoHome(){try{if(document.documentElement.classList.contains('neoya-native')||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches))return;sessionStorage.removeItem('nv_in_app');}catch(e){}var a=document.getElementById('app');if(a)a.classList.add('hidden');var l=document.getElementById('login');if(l)l.classList.add('hidden');var h=document.getElementById('home');if(h)h.classList.remove('hidden');window.scrollTo(0,0);}
+window.nbGoHome=nbGoHome;
 </script>
 <script>
 const COL=['#E8412E','#F2A03D','#2F8F4E','#2B5F8B','#6B4E9E'];
@@ -684,7 +687,7 @@ let quizSubj='국어',qi=0,qcorrect=0,qmiss=[];
 function enter(){state.guest=true;state.user=null;state.role=document.getElementById('role').value;bootIntoApp();}
 function enterAdmin(){state.guest=true;state.user=null;state.role='student';state.adminFull=true;bootIntoApp();}
 window.enterAdmin=enterAdmin;
-function bootIntoApp(){var _h=document.getElementById('home');if(_h)_h.classList.add('hidden');document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyModeState();buildTabs();updateTopBar();go(state.adminFull?'admin':state.role==='admin'?'admin':state.role==='parent'?'parent':'diag');var lo=document.getElementById('logoutBtn');if(lo)lo.classList.toggle('hidden',!state.user);}
+function bootIntoApp(){try{if(state.user)sessionStorage.setItem('nv_in_app','1');}catch(e){}var _h=document.getElementById('home');if(_h)_h.classList.add('hidden');document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyModeState();buildTabs();updateTopBar();go(state.adminFull?'admin':state.role==='admin'?'admin':state.role==='parent'?'parent':'diag');var lo=document.getElementById('logoutBtn');if(lo)lo.classList.toggle('hidden',!state.user);}
 function updateTopBar(){var sbn=document.getElementById('sampleBtn');if(sbn)sbn.classList.toggle('hidden',!!state.user);var e=document.getElementById('xpv');if(!e)return;e.textContent=state.xp;document.getElementById('xpf').style.width=(state.xp/500*100)+'%';document.getElementById('lvl').textContent='Lv.'+state.lvl;document.getElementById('pts').textContent=state.points.toLocaleString()+'P';}
 function applyModeState(){if(state.user)return;if(state.sampleMode){state.xp=320;state.lvl=4;state.points=1240;seedHistory();}else{state.xp=0;state.lvl=1;state.points=0;state.done={};state.timing={};}}
 window.toggleSample=function(){if(state.user)return;state.sampleMode=!state.sampleMode;applyModeState();var b=document.getElementById('sampleBtn');if(b){b.innerHTML=state.sampleMode?'● 라이브로 ↩':'🔎 샘플 보기';b.style.background=state.sampleMode?'#8C6719':'#fff';b.style.color=state.sampleMode?'#fff':'var(--muted)';}updateTopBar();var on=document.querySelector('.tab.on');go(on?on.getAttribute('data-k'):'cal');};
@@ -1123,6 +1126,8 @@ function addPts(n){state.points+=n;document.getElementById('pts').textContent=st
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>e.classList.remove('show'),1900);}
 </script><script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+/* 인증 콜백 표식은 supabase-js 가 주소를 지우기 전에 잡아 둔다(OAuth·메일 인증·재설정 링크) */
+const NB_AUTH_URL=/[#&?](access_token|refresh_token|code|token_hash|error_code)=|[?&]verified=1|[#&?]type=(signup|recovery|magiclink|invite|email_change)/.test(location.search+location.hash);
 const SB = createClient('https://iwrblahmszuthemfrhmy.supabase.co','sb_publishable_k-WJ3TAhq32b4fyp5EsQhg_Mo8yKGso');
 window.NB = { sb: SB, user: null };
 let mode='login';
@@ -1177,8 +1182,14 @@ window.nbLoadReviews=async()=>{if(!window.NB.user)return;const {data}=await SB.f
 window.nbCompleteReview=async(id,sec)=>{if(!window.NB.user)return;await SB.from('review_events').update({status:'done',completed_at:new Date().toISOString(),duration_sec:sec}).eq('id',id);await window.nbLoadReviews();await window.nbStats();if(window.go)window.go('today');};
 window.nbStats=async()=>{if(!window.NB.user)return;const uid=window.NB.user.id;const {data:re}=await SB.from('review_events').select('status').eq('student_id',uid);const {data:qa}=await SB.from('quiz_attempts').select('correct,attempted_at').eq('student_id',uid);const rd=(re||[]).filter(x=>x.status==='done').length;const qc=(qa||[]).filter(x=>x.correct).length;const _td=new Date().toISOString().slice(0,10);const _qt=(qa||[]).filter(x=>String(x.attempted_at||'').slice(0,10)===_td).length;window.state.dbStats={reviewRate:re&&re.length?Math.round(rd/re.length*100):0,quizRate:qa&&qa.length?Math.round(qc/qa.length*100):0,reviewDone:rd,reviewTotal:(re||[]).length,quizTotal:(qa||[]).length,quizCorrect:qc,quizToday:_qt};};
 window.nbOAuth=async(provider)=>{try{var nm=provider.replace('custom:','');msg(nm+' 로그인 연결 중...');var redirectTo=location.href.split('#')[0].split('?')[0];var r=await SB.auth.signInWithOAuth({provider:provider,options:{redirectTo:redirectTo}});if(r&&r.error){msg('간편가입 준비 중입니다('+nm+'): '+r.error.message,1);}}catch(e){msg('간편가입 준비 중입니다: '+e.message,1);}};
-SB.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session&&session.user&&!window.NB.user){window.NB.user=session.user;bootUser();}});
-SB.auth.getSession().then(({data})=>{if(data&&data.session){window.NB.user=data.session.user;bootUser();}});
+/* 저장된 로그인으로 앱에 바로 들어가는 경우: /app 경로 · 설치 앱 · 로그인 직후(콜백) · 앱을 보던 탭의 새로고침.
+   그 밖에 브라우저로 neoya.kr 에 들어오면 로그인 상태여도 홈을 보여 주고, 홈 버튼이 '내 학습으로'가 된다. */
+window.nbWantsApp=function(){try{var p=location.pathname;if(p==='/app'||p.indexOf('/app/')===0)return true;if(/[?&](app|shell)=1(&|$)/.test(location.search))return true;if(document.documentElement.classList.contains('neoya-native'))return true;/* native-bridge.js(defer)가 이 모듈보다 늦게 돌 수 있어 앱 감지를 직접 한다 */if(/^android-app:\/\//.test(document.referrer||'')||sessionStorage.getItem('neoya_twa')==='1')return true;if(window.Capacitor&&typeof Capacitor.isNativePlatform==='function'&&Capacitor.isNativePlatform())return true;if(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)return true;if(NB_AUTH_URL)return true;var nv=performance.getEntriesByType&&performance.getEntriesByType('navigation')[0];if(nv&&nv.type==='reload'&&sessionStorage.getItem('nv_in_app')==='1')return true;}catch(e){}return false;};
+window.nbEnterApp=function(){if(window.state&&window.state.user){window.bootIntoApp();return;}if(window.NB.user){window.toast('내 학습을 불러오는 중이에요');bootUser();}};
+window.nbHomeSignedIn=function(){document.querySelectorAll('#home [data-nv-auth="login"]').forEach(function(a){a.style.display='none';});document.querySelectorAll('#home [data-nv-auth="cta"]').forEach(function(a){var t=a.getAttribute('data-nv-in');if(t)a.textContent=t;});};
+let nbAuthReady=false;
+SB.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session&&session.user&&!window.NB.user){if(!nbAuthReady&&!window.nbWantsApp())return;/* 페이지 첫 로드의 세션 복원은 아래 getSession 이 판정 */window.NB.user=session.user;bootUser();}});
+SB.auth.getSession().then(({data})=>{nbAuthReady=true;if(data&&data.session){window.NB.user=data.session.user;if(window.nbWantsApp())bootUser();else window.nbHomeSignedIn();}},()=>{nbAuthReady=true;});
 try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.sampleMode=true;if((_rp.get('run')==='nvowner'||_rp.get('admin')==='ktm'||_rp.get('demo')==='1')&&window.enterAdmin){window.enterAdmin();}}catch(e){}
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
