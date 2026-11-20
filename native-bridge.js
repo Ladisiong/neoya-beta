@@ -1,4 +1,4 @@
-/* 너야(NEOYA) 네이티브 앱 브릿지 v1.1 — Android(TWA) 표시 + iOS(Capacitor) 로그인 브릿지.
+/* 너야 NEOYA 네이티브 앱 브릿지 v1.1 — Android(TWA) 표시 + iOS(Capacitor) 로그인 브릿지.
    일반 웹 브라우저·Android TWA(Chrome)에서는 첫 줄에서 즉시 종료되어 아무 동작도 하지 않는다.
 
    해결하는 문제: iOS 앱은 WKWebView로 사이트를 표시하는데, 구글 OAuth는 임베디드 웹뷰를
