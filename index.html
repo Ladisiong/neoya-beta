@@ -878,13 +878,22 @@ function Admin(){
 window.loadAdminMetrics=async function(){
  var w=document.getElementById('admLive'); if(!w) return;
  w.innerHTML='<div class="card"><div style="color:var(--muted)">실시간 집계 불러오는 중…</div></div>';
+ var note=function(t,btn){w.innerHTML='<div class="card"><div style="color:var(--muted)">'+t+'</div>'+(btn?'<div style="margin-top:12px">'+btn+'</div>':'')+'</div>';};
  try{
+  /* admin_metrics 는 관리자 계정(profiles.role=admin)의 로그인 토큰으로만 열린다 — 공개 키 호출은 DB에서 막혀 있다(401). */
+  var sb=window.NB&&window.NB.sb, ses=null;
+  if(sb){var gs=await sb.auth.getSession();ses=gs&&gs.data&&gs.data.session;}
+  if(!ses){note('관리자 계정으로 로그인하면 실시간 집계가 열립니다.','<button class="btn" style="padding:7px 14px;font-size:.82rem" onclick="nbAdminLogin()">관리자 로그인</button>');return;}
+  try{sessionStorage.removeItem('nv_admin_return');}catch(e){}
   var U='https://iwrblahmszuthemfrhmy.supabase.co', K='sb_publishable_k-WJ3TAhq32b4fyp5EsQhg_Mo8yKGso';
-  var r=await fetch(U+'/rest/v1/rpc/admin_metrics',{method:'POST',headers:{apikey:K,authorization:'Bearer '+K,'content-type':'application/json'},body:'{}',cache:'no-store'});
-  if(!r.ok){w.innerHTML='<div class="card"><div style="color:var(--muted)">집계 오류 '+r.status+'</div></div>';return;}
+  var r=await fetch(U+'/rest/v1/rpc/admin_metrics',{method:'POST',headers:{apikey:K,authorization:'Bearer '+ses.access_token,'content-type':'application/json'},body:'{}',cache:'no-store'});
+  if(r.status===401||r.status===403){var em=document.createElement('i');em.textContent=(ses.user&&ses.user.email)||'현재 계정';note('<b>'+em.innerHTML+'</b> 계정에는 관리자 권한이 없습니다. 관리자 계정으로 다시 로그인해 주세요.','<button class="btn" style="padding:7px 14px;font-size:.82rem" onclick="nbAdminRelogin()">다른 계정으로 로그인</button>');return;}
+  if(!r.ok){note('집계 오류 '+r.status);return;}
   w.innerHTML=window.renderAdminHTML(await r.json());
  }catch(e){w.innerHTML='<div class="card"><div style="color:var(--muted)">연결 실패: '+(e&&e.message||e)+'</div></div>';}
 };
+window.nbAdminLogin=function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}window.goSignup();};
+window.nbAdminRelogin=async function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}try{if(window.NB&&window.NB.sb)await window.NB.sb.auth.signOut();}catch(e){}location.reload();};
 window.renderAdminHTML=function(m){
  var won=function(n){return '₩'+(Number(n||0)).toLocaleString();};
  var dist=function(obj){var ks=Object.keys(obj||{});if(!ks.length)return '<div style="color:var(--muted);font-size:.8rem">데이터 없음</div>';var mx=Math.max.apply(null,ks.map(function(k){return obj[k];}))||1;return ks.map(function(k){return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0"><span style="min-width:96px;font-size:.8rem">'+k+'</span><div style="flex:1;height:12px;background:#F2F4F6;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+Math.round(obj[k]/mx*100)+'%;background:var(--mid)"></div></div><b style="font-size:.8rem;min-width:30px;text-align:right">'+obj[k]+'</b></div>';}).join('');};
@@ -1190,7 +1199,7 @@ window.nbHomeSignedIn=function(){document.querySelectorAll('#home [data-nv-auth=
 let nbAuthReady=false;
 SB.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session&&session.user&&!window.NB.user){if(!nbAuthReady&&!window.nbWantsApp())return;/* 페이지 첫 로드의 세션 복원은 아래 getSession 이 판정 */window.NB.user=session.user;bootUser();}});
 SB.auth.getSession().then(({data})=>{nbAuthReady=true;if(data&&data.session){window.NB.user=data.session.user;if(window.nbWantsApp())bootUser();else window.nbHomeSignedIn();}},()=>{nbAuthReady=true;});
-try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.sampleMode=true;if((_rp.get('run')==='nvowner'||_rp.get('admin')==='ktm'||_rp.get('demo')==='1')&&window.enterAdmin){window.enterAdmin();}}catch(e){}
+try{var _rp=new URLSearchParams(location.search);if(_rp.get('demo')==='1')state.sampleMode=true;var _admRet=false;try{_admRet=sessionStorage.getItem('nv_admin_return')==='1';sessionStorage.removeItem('nv_admin_return');}catch(e){}/* 관리자 로그인 왕복(소셜 로그인은 쿼리가 지워진 주소로 돌아온다) 뒤 대시보드 복귀 */if((_rp.get('run')==='nvowner'||_rp.get('admin')==='ktm'||_rp.get('demo')==='1'||_admRet)&&window.enterAdmin){window.enterAdmin();}}catch(e){}
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 <script>
