@@ -875,7 +875,8 @@ function Admin(){
  setTimeout(function(){if(window.loadAdminMetrics)window.loadAdminMetrics();},0);
  return box;
 }
-/* 관리자 대시보드 열기: ① 로그인한 관리자 계정(profiles.role=admin) 또는 ② 관리자 비밀번호로 잠금 해제.
+/* 관리자 대시보드 열기: ① 로그인한 관리자 계정(profiles.role=admin) ② 본사 OS(os.neoya.kr)에 CVO 로 로그인된 브라우저면 자동
+   ③ 관리자 비밀번호로 잠금 해제. ②는 OS 서버가 로그인 쿠키를 확인하고 8시간짜리 해제 토큰을 내준다(응답은 neoya.kr 에서만 읽힘).
    공개 키만으로는 집계를 볼 수 없다(DB에서 차단). 비밀번호는 DB에 bcrypt 해시로만 있고, 맞으면 8시간짜리 해제 토큰을 받는다
    (이 탭의 sessionStorage 에만 보관). 연속 실패는 DB가 잠근다(같은 IP 5회/15분 · 전체 30회/60분). */
 window._nbAdm=(function(){
@@ -883,6 +884,10 @@ window._nbAdm=(function(){
  function rpc(fn,body,bearer){return fetch(U+'/rest/v1/rpc/'+fn,{method:'POST',headers:{apikey:K,authorization:'Bearer '+(bearer||K),'content-type':'application/json'},body:JSON.stringify(body||{}),cache:'no-store'});}
  function tok(v){try{if(v===null){sessionStorage.removeItem(TK);return '';}if(v){sessionStorage.setItem(TK,JSON.stringify(v));return v.t;}var o=JSON.parse(sessionStorage.getItem(TK)||'null');if(o&&o.t&&(!o.exp||o.exp>Date.now()))return o.t;sessionStorage.removeItem(TK);}catch(e){}return '';}
  function esc(t){var d=document.createElement('i');d.textContent=String(t==null?'':t);return d.innerHTML;}
+ /* 본사 OS 로그인 확인 → 해제 토큰. OS 에 로그인돼 있지 않거나 창구가 없으면 null (조용히 비밀번호 잠금으로 넘어간다) */
+ async function os(){try{var c=new AbortController(),tm=setTimeout(function(){c.abort();},4000);var r=await fetch('https://os.neoya.kr/api/admin-open',{credentials:'include',cache:'no-store',signal:c.signal});clearTimeout(tm);if(!r.ok)return null;var j=await r.json();if(j&&j.ok&&j.token)return {t:j.token,exp:Date.parse(j.expires_at)||0};}catch(e){}return null;}
+ /* [잠금]을 직접 누른 탭은 다시 열어 달라고 할 때까지 자동으로 열지 않는다 */
+ function locked(v){try{if(v===true)sessionStorage.setItem('nv_admin_locked','1');else if(v===false)sessionStorage.removeItem('nv_admin_locked');return sessionStorage.getItem('nv_admin_locked')==='1';}catch(e){return false;}}
  function msg(t,err){var m=document.getElementById('admGateMsg');if(m){m.textContent=t||'';m.style.color=err?'var(--c1)':'var(--muted)';}}
  var IN='width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--border);border-radius:12px;font-size:.92rem;margin-top:10px;background:#fff;color:var(--deep)';
  var BT='padding:9px 16px;font-size:.86rem;margin-top:12px';
@@ -904,12 +909,12 @@ window._nbAdm=(function(){
    +'<input id="admPw" type="password" autocomplete="current-password" aria-label="관리자 비밀번호" placeholder="관리자 비밀번호" style="'+IN+'" onkeydown="if(event.key===\'Enter\')nbAdminUnlock()"/>'
    +'<div><button class="btn" style="'+BT+'" onclick="nbAdminUnlock()">잠금 해제</button></div>'
    +'<div id="admGateMsg" style="font-size:.8rem;min-height:18px;margin-top:8px"></div>'
-   +'<div style="margin-top:6px;font-size:.78rem"><a href="#" style="color:var(--mid)" onclick="'+(o.who?'nbAdminRelogin()':'nbAdminLogin()')+';return false">'+(o.who?'다른 계정으로 로그인':'관리자 계정으로 로그인')+'</a></div></div>';
+   +'<div style="margin-top:6px;font-size:.78rem"><a href="#" style="color:var(--mid)" onclick="nbAdminOsOpen();return false">본사 OS 로그인으로 열기</a> · <a href="#" style="color:var(--mid)" onclick="'+(o.who?'nbAdminRelogin()':'nbAdminLogin()')+';return false">'+(o.who?'다른 계정으로 로그인':'관리자 계정으로 로그인')+'</a></div></div>';
   if(o.msg)msg(o.msg,1);
   setTimeout(function(){var i=document.getElementById('admPw');if(i)i.focus();},0);
  }
- function bar(){return '<div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px"><button class="btn" style="padding:5px 12px;font-size:.76rem;background:#fff;color:var(--muted);border:1px solid var(--border)" onclick="nbAdminChangeCode()">비밀번호 변경</button><button class="btn" style="padding:5px 12px;font-size:.76rem" onclick="nbAdminLock()">잠금</button></div>';}
- return {rpc:rpc,tok:tok,msg:msg,gate:gate,bar:bar};
+ function bar(via){return '<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px"><span style="margin-right:auto;font-size:.76rem;color:var(--muted)">'+(via==='os'?'본사 OS 로그인으로 열림':'관리자 비밀번호로 열림')+'</span><button class="btn" style="padding:5px 12px;font-size:.76rem;background:#fff;color:var(--muted);border:1px solid var(--border)" onclick="nbAdminChangeCode()">비밀번호 변경</button><button class="btn" style="padding:5px 12px;font-size:.76rem" onclick="nbAdminLock()">잠금</button></div>';}
+ return {rpc:rpc,tok:tok,msg:msg,gate:gate,bar:bar,os:os,locked:locked};
 })();
 window.loadAdminMetrics=async function(){
  var w=document.getElementById('admLive'); if(!w) return; var A=window._nbAdm;
@@ -926,17 +931,20 @@ window.loadAdminMetrics=async function(){
    if(r.status!==401&&r.status!==403){note('집계 오류 '+r.status);return;}
    who=(ses.user&&ses.user.email)||'현재 계정';
   }
-  /* ② 비밀번호로 받은 해제 토큰 */
-  var tk=A.tok();
-  if(tk){
+  /* ② 이 탭에 있는 해제 토큰 → 없거나 끝났으면 본사 OS 로그인으로 자동 열기(한 번) */
+  var tk=A.tok(), triedOs=false, expired=false;
+  for(var pass=0;pass<2;pass++){
+   if(!tk&&!triedOs&&!A.locked()){triedOs=true;var o=await A.os();if(o){A.tok(o);tk=o.t;}}
+   if(!tk)break;
    var r2=await A.rpc('admin_metrics_unlocked',{p_token:tk});
    if(!r2.ok){note('집계 오류 '+r2.status);return;}
    var j=await r2.json();
-   if(j&&j.ok){w.innerHTML=A.bar()+window.renderAdminHTML(j.data);return;}
+   if(j&&j.ok){w.innerHTML=A.bar(j.via)+window.renderAdminHTML(j.data);return;}
    if(j&&j.reason==='must_change'){A.gate('change');return;}
-   A.tok(null);A.gate('lock',{who:who,msg:'잠금 해제 시간이 끝났습니다. 다시 해제해 주세요.'});return;
+   A.tok(null);tk='';expired=true;
   }
-  A.gate('lock',{who:who});
+  /* ③ 비밀번호 잠금 */
+  A.gate('lock',{who:who,msg:expired?'잠금 해제 시간이 끝났습니다. 다시 해제해 주세요.':''});
  }catch(e){w.innerHTML='<div class="card"><div style="color:var(--muted)">연결 실패: '+(e&&e.message||e)+'</div></div>';}
 };
 window.nbAdminUnlock=async function(){
@@ -946,7 +954,7 @@ window.nbAdminUnlock=async function(){
  try{
   var r=await A.rpc('admin_unlock',{p_code:v}); if(!r.ok){A.msg('확인하지 못했습니다(오류 '+r.status+'). 잠시 뒤 다시 시도해 주세요.',1);return;}
   var j=await r.json();
-  if(j&&j.ok){A.tok({t:j.token,exp:Date.parse(j.expires_at)||0});if(j.must_change){A.gate('change');return;}window.loadAdminMetrics();return;}
+  if(j&&j.ok){A.locked(false);A.tok({t:j.token,exp:Date.parse(j.expires_at)||0});if(j.must_change){A.gate('change');return;}window.loadAdminMetrics();return;}
   var why=j&&j.reason;
   if(why==='wrong'){if(i){i.value='';i.focus();}A.msg('비밀번호가 맞지 않습니다.'+(j.remaining>0?' 남은 시도 '+j.remaining+'회.':' 시도 횟수를 넘겨 15분 동안 잠깁니다.'),1);}
   else if(why==='locked'){A.msg('시도가 너무 많아 잠겼습니다. 약 '+Math.max(1,Math.ceil((j.retry_after_sec||60)/60))+'분 뒤 다시 시도해 주세요.',1);}
@@ -970,7 +978,8 @@ window.nbAdminSetCode=async function(){
  }catch(e){A.msg('연결 실패: '+(e&&e.message||e),1);}
 };
 window.nbAdminChangeCode=function(){window._nbAdm.gate('change',{voluntary:true});};
-window.nbAdminLock=async function(){var A=window._nbAdm,tk=A.tok();A.tok(null);A.gate('lock');try{if(tk)await A.rpc('admin_lock',{p_token:tk});}catch(e){}};
+window.nbAdminLock=async function(){var A=window._nbAdm,tk=A.tok();A.tok(null);A.locked(true);A.gate('lock');try{if(tk)await A.rpc('admin_lock',{p_token:tk});}catch(e){}};
+window.nbAdminOsOpen=async function(){var A=window._nbAdm;A.msg('본사 OS 로그인 확인 중…');var o=await A.os();if(o){A.locked(false);A.tok(o);window.loadAdminMetrics();return;}A.msg('본사 OS(os.neoya.kr)에 로그인돼 있지 않습니다. OS에 로그인한 뒤 다시 눌러 주세요.',1);};
 window.nbAdminLogin=function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}window.goSignup();};
 window.nbAdminRelogin=async function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}try{if(window.NB&&window.NB.sb)await window.NB.sb.auth.signOut();}catch(e){}location.reload();};
 window.renderAdminHTML=function(m){
