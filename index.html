@@ -875,23 +875,102 @@ function Admin(){
  setTimeout(function(){if(window.loadAdminMetrics)window.loadAdminMetrics();},0);
  return box;
 }
+/* 관리자 대시보드 열기: ① 로그인한 관리자 계정(profiles.role=admin) 또는 ② 관리자 비밀번호로 잠금 해제.
+   공개 키만으로는 집계를 볼 수 없다(DB에서 차단). 비밀번호는 DB에 bcrypt 해시로만 있고, 맞으면 8시간짜리 해제 토큰을 받는다
+   (이 탭의 sessionStorage 에만 보관). 연속 실패는 DB가 잠근다(같은 IP 5회/15분 · 전체 30회/60분). */
+window._nbAdm=(function(){
+ var U='https://iwrblahmszuthemfrhmy.supabase.co', K='sb_publishable_k-WJ3TAhq32b4fyp5EsQhg_Mo8yKGso', TK='nv_admin_tok';
+ function rpc(fn,body,bearer){return fetch(U+'/rest/v1/rpc/'+fn,{method:'POST',headers:{apikey:K,authorization:'Bearer '+(bearer||K),'content-type':'application/json'},body:JSON.stringify(body||{}),cache:'no-store'});}
+ function tok(v){try{if(v===null){sessionStorage.removeItem(TK);return '';}if(v){sessionStorage.setItem(TK,JSON.stringify(v));return v.t;}var o=JSON.parse(sessionStorage.getItem(TK)||'null');if(o&&o.t&&(!o.exp||o.exp>Date.now()))return o.t;sessionStorage.removeItem(TK);}catch(e){}return '';}
+ function esc(t){var d=document.createElement('i');d.textContent=String(t==null?'':t);return d.innerHTML;}
+ function msg(t,err){var m=document.getElementById('admGateMsg');if(m){m.textContent=t||'';m.style.color=err?'var(--c1)':'var(--muted)';}}
+ var IN='width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid var(--border);border-radius:12px;font-size:.92rem;margin-top:10px;background:#fff;color:var(--deep)';
+ var BT='padding:9px 16px;font-size:.86rem;margin-top:12px';
+ /* mode: 'lock' = 비밀번호 입력 · 'change' = 새 비밀번호 설정(임시 비밀번호 확인 직후 또는 직접 변경) */
+ function gate(mode,o){
+  var w=document.getElementById('admLive'); if(!w) return; o=o||{};
+  if(mode==='change'){
+   w.innerHTML='<div class="card" style="max-width:440px"><b style="font-size:.98rem">새 관리자 비밀번호 설정</b>'
+    +'<div style="color:var(--muted);font-size:.82rem;margin-top:4px">'+(o.voluntary?'앞으로 쓸 비밀번호를 정해 주세요.':'임시 비밀번호가 확인됐습니다. 앞으로 쓸 비밀번호를 정해 주세요.')+' 10자 이상.</div>'
+    +'<input id="admNew" type="password" autocomplete="new-password" aria-label="새 비밀번호" placeholder="새 비밀번호 (10자 이상)" style="'+IN+'"/>'
+    +'<input id="admNew2" type="password" autocomplete="new-password" aria-label="새 비밀번호 확인" placeholder="새 비밀번호 확인" style="'+IN+'" onkeydown="if(event.key===\'Enter\')nbAdminSetCode()"/>'
+    +'<div><button class="btn" style="'+BT+'" onclick="nbAdminSetCode()">저장하고 열기</button>'+(o.voluntary?' <button class="btn" style="'+BT+';background:#fff;color:var(--muted);border:1px solid var(--border)" onclick="loadAdminMetrics()">취소</button>':'')+'</div>'
+    +'<div id="admGateMsg" style="font-size:.8rem;min-height:18px;margin-top:8px"></div></div>';
+   setTimeout(function(){var i=document.getElementById('admNew');if(i)i.focus();},0);return;
+  }
+  w.innerHTML='<div class="card" style="max-width:440px"><b style="font-size:.98rem">관리자 대시보드 잠금</b>'
+   +'<div style="color:var(--muted);font-size:.82rem;margin-top:4px">관리자 비밀번호를 입력하면 실시간 집계가 열립니다.</div>'
+   +(o.who?'<div style="color:var(--muted);font-size:.8rem;margin-top:6px">지금 로그인한 <b>'+esc(o.who)+'</b> 계정은 관리자 계정이 아닙니다.</div>':'')
+   +'<input id="admPw" type="password" autocomplete="current-password" aria-label="관리자 비밀번호" placeholder="관리자 비밀번호" style="'+IN+'" onkeydown="if(event.key===\'Enter\')nbAdminUnlock()"/>'
+   +'<div><button class="btn" style="'+BT+'" onclick="nbAdminUnlock()">잠금 해제</button></div>'
+   +'<div id="admGateMsg" style="font-size:.8rem;min-height:18px;margin-top:8px"></div>'
+   +'<div style="margin-top:6px;font-size:.78rem"><a href="#" style="color:var(--mid)" onclick="'+(o.who?'nbAdminRelogin()':'nbAdminLogin()')+';return false">'+(o.who?'다른 계정으로 로그인':'관리자 계정으로 로그인')+'</a></div></div>';
+  if(o.msg)msg(o.msg,1);
+  setTimeout(function(){var i=document.getElementById('admPw');if(i)i.focus();},0);
+ }
+ function bar(){return '<div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:8px"><button class="btn" style="padding:5px 12px;font-size:.76rem;background:#fff;color:var(--muted);border:1px solid var(--border)" onclick="nbAdminChangeCode()">비밀번호 변경</button><button class="btn" style="padding:5px 12px;font-size:.76rem" onclick="nbAdminLock()">잠금</button></div>';}
+ return {rpc:rpc,tok:tok,msg:msg,gate:gate,bar:bar};
+})();
 window.loadAdminMetrics=async function(){
- var w=document.getElementById('admLive'); if(!w) return;
+ var w=document.getElementById('admLive'); if(!w) return; var A=window._nbAdm;
  w.innerHTML='<div class="card"><div style="color:var(--muted)">실시간 집계 불러오는 중…</div></div>';
- var note=function(t,btn){w.innerHTML='<div class="card"><div style="color:var(--muted)">'+t+'</div>'+(btn?'<div style="margin-top:12px">'+btn+'</div>':'')+'</div>';};
+ var note=function(t){w.innerHTML='<div class="card"><div style="color:var(--muted)">'+t+'</div></div>';};
  try{
-  /* admin_metrics 는 관리자 계정(profiles.role=admin)의 로그인 토큰으로만 열린다 — 공개 키 호출은 DB에서 막혀 있다(401). */
-  var sb=window.NB&&window.NB.sb, ses=null;
+  /* ① 로그인한 관리자 계정이면 바로 연다 */
+  var sb=window.NB&&window.NB.sb, ses=null, who='';
   if(sb){var gs=await sb.auth.getSession();ses=gs&&gs.data&&gs.data.session;}
-  if(!ses){note('관리자 계정으로 로그인하면 실시간 집계가 열립니다.','<button class="btn" style="padding:7px 14px;font-size:.82rem" onclick="nbAdminLogin()">관리자 로그인</button>');return;}
-  try{sessionStorage.removeItem('nv_admin_return');}catch(e){}
-  var U='https://iwrblahmszuthemfrhmy.supabase.co', K='sb_publishable_k-WJ3TAhq32b4fyp5EsQhg_Mo8yKGso';
-  var r=await fetch(U+'/rest/v1/rpc/admin_metrics',{method:'POST',headers:{apikey:K,authorization:'Bearer '+ses.access_token,'content-type':'application/json'},body:'{}',cache:'no-store'});
-  if(r.status===401||r.status===403){var em=document.createElement('i');em.textContent=(ses.user&&ses.user.email)||'현재 계정';note('<b>'+em.innerHTML+'</b> 계정에는 관리자 권한이 없습니다. 관리자 계정으로 다시 로그인해 주세요.','<button class="btn" style="padding:7px 14px;font-size:.82rem" onclick="nbAdminRelogin()">다른 계정으로 로그인</button>');return;}
-  if(!r.ok){note('집계 오류 '+r.status);return;}
-  w.innerHTML=window.renderAdminHTML(await r.json());
+  if(ses){
+   try{sessionStorage.removeItem('nv_admin_return');}catch(e){}
+   var r=await A.rpc('admin_metrics',{},ses.access_token);
+   if(r.ok){w.innerHTML=window.renderAdminHTML(await r.json());return;}
+   if(r.status!==401&&r.status!==403){note('집계 오류 '+r.status);return;}
+   who=(ses.user&&ses.user.email)||'현재 계정';
+  }
+  /* ② 비밀번호로 받은 해제 토큰 */
+  var tk=A.tok();
+  if(tk){
+   var r2=await A.rpc('admin_metrics_unlocked',{p_token:tk});
+   if(!r2.ok){note('집계 오류 '+r2.status);return;}
+   var j=await r2.json();
+   if(j&&j.ok){w.innerHTML=A.bar()+window.renderAdminHTML(j.data);return;}
+   if(j&&j.reason==='must_change'){A.gate('change');return;}
+   A.tok(null);A.gate('lock',{who:who,msg:'잠금 해제 시간이 끝났습니다. 다시 해제해 주세요.'});return;
+  }
+  A.gate('lock',{who:who});
  }catch(e){w.innerHTML='<div class="card"><div style="color:var(--muted)">연결 실패: '+(e&&e.message||e)+'</div></div>';}
 };
+window.nbAdminUnlock=async function(){
+ var A=window._nbAdm, i=document.getElementById('admPw'), v=i?i.value:'';
+ if(!v){A.msg('비밀번호를 입력해 주세요.',1);return;}
+ A.msg('확인 중…');
+ try{
+  var r=await A.rpc('admin_unlock',{p_code:v}); if(!r.ok){A.msg('확인하지 못했습니다(오류 '+r.status+'). 잠시 뒤 다시 시도해 주세요.',1);return;}
+  var j=await r.json();
+  if(j&&j.ok){A.tok({t:j.token,exp:Date.parse(j.expires_at)||0});if(j.must_change){A.gate('change');return;}window.loadAdminMetrics();return;}
+  var why=j&&j.reason;
+  if(why==='wrong'){if(i){i.value='';i.focus();}A.msg('비밀번호가 맞지 않습니다.'+(j.remaining>0?' 남은 시도 '+j.remaining+'회.':' 시도 횟수를 넘겨 15분 동안 잠깁니다.'),1);}
+  else if(why==='locked'){A.msg('시도가 너무 많아 잠겼습니다. 약 '+Math.max(1,Math.ceil((j.retry_after_sec||60)/60))+'분 뒤 다시 시도해 주세요.',1);}
+  else if(why==='not_configured'){A.msg('관리자 비밀번호가 아직 설정되지 않았습니다.',1);}
+  else if(why==='temp_expired'){A.msg('임시 비밀번호의 유효기간이 지났습니다. 새 임시 비밀번호가 필요합니다.',1);}
+  else{A.msg('잠금을 해제하지 못했습니다.',1);}
+ }catch(e){A.msg('연결 실패: '+(e&&e.message||e),1);}
+};
+window.nbAdminSetCode=async function(){
+ var A=window._nbAdm, a=(document.getElementById('admNew')||{}).value||'', b=(document.getElementById('admNew2')||{}).value||'';
+ if(a.length<10){A.msg('10자 이상으로 정해 주세요.',1);return;}
+ if(a!==b){A.msg('두 칸의 비밀번호가 서로 다릅니다.',1);return;}
+ A.msg('저장 중…');
+ try{
+  var r=await A.rpc('admin_gate_change_code',{p_token:A.tok(),p_new:a}); if(!r.ok){A.msg('저장하지 못했습니다(오류 '+r.status+').',1);return;}
+  var j=await r.json();
+  if(j&&j.ok){if(window.toast)window.toast('관리자 비밀번호를 바꿨어요');window.loadAdminMetrics();return;}
+  if(j&&j.reason==='weak'){A.msg('10자 이상 100자 이하로 정해 주세요.',1);}
+  else if(j&&j.reason==='same'){A.msg('지금 비밀번호와 다른 것으로 정해 주세요.',1);}
+  else{A.tok(null);A.gate('lock',{msg:'잠금 해제 시간이 끝났습니다. 다시 해제한 뒤 바꿔 주세요.'});}
+ }catch(e){A.msg('연결 실패: '+(e&&e.message||e),1);}
+};
+window.nbAdminChangeCode=function(){window._nbAdm.gate('change',{voluntary:true});};
+window.nbAdminLock=async function(){var A=window._nbAdm,tk=A.tok();A.tok(null);A.gate('lock');try{if(tk)await A.rpc('admin_lock',{p_token:tk});}catch(e){}};
 window.nbAdminLogin=function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}window.goSignup();};
 window.nbAdminRelogin=async function(){try{sessionStorage.setItem('nv_admin_return','1');}catch(e){}try{if(window.NB&&window.NB.sb)await window.NB.sb.auth.signOut();}catch(e){}location.reload();};
 window.renderAdminHTML=function(m){
