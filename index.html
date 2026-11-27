@@ -10,31 +10,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="너야"/>
 <meta name="google-site-verification" content="UrFWDGoDVbyUoLKavZhS2fThz9AXxM-Xa063CwWDSYM"/>
-<script>
-/* GA4 - 큐는 즉시, 라이브러리는 유휴 시점에.
-   gtag.js 를 곧바로 받으면 모바일 성능이 86 -> 46, TBT 0 -> 930ms 로 무너진다.
-   dataLayer 는 지금 채워 두고 115KB 라이브러리만 뒤로 미룬다. 라이브러리가
-   로드되면 큐에 쌓인 config/page_view 가 그대로 처리되므로 히트는 유실되지 않는다.
-   사용자가 먼저 움직이면 즉시 당겨 로드해 짧은 세션도 놓치지 않는다. */
-(function(){
-  var MID='G-C6PGT89864', loaded=false;
-  window.dataLayer=window.dataLayer||[];
-  window.gtag=function(){window.dataLayer.push(arguments);};
-  gtag('js',new Date());
-  gtag('config',MID);
-  function load(){
-    if(loaded){return;} loaded=true;
-    var s=document.createElement('script');
-    s.async=true; s.src='https://www.googletagmanager.com/gtag/js?id='+MID;
-    document.head.appendChild(s);
-  }
-  if('requestIdleCallback' in window){ requestIdleCallback(load,{timeout:3500}); }
-  else { setTimeout(load,2500); }
-  ['pointerdown','keydown','scroll','touchstart'].forEach(function(e){
-    window.addEventListener(e,load,{once:true,passive:true});
-  });
-})();
-</script>
 <link rel="canonical" href="https://neoya.kr/"/>
 <link rel="icon" href="/favicon.ico" sizes="any"/>
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png"/>
@@ -3224,9 +3199,6 @@ html.nv-appshell #nvHub button{min-width:0}
     }
   }
 
-  /* ── 앱 진입 계측(GA4 · 개인 식별 정보 없음) ── */
-  try { if (isAppCtx() && typeof window.gtag === 'function') { window.gtag('event', 'app_open', { app_source: source(), launch: launch }); } } catch (e) { }
-
   function inApp() { var a = document.getElementById('app'); return !!(a && !a.classList.contains('hidden')); }
   /* 부팅 완료 판정: 로그인 사용자의 복습 목록이 새로 채워졌는가(기본값 배열과 다른 배열) */
   var REV0 = st().dbRev;
@@ -3272,7 +3244,6 @@ html.nv-appshell #nvHub button{min-width:0}
         var d = e && e.data; if (!d || d.type !== 'nv-open' || typeof d.url !== 'string') { return; }
         var g2 = null; try { var u = new URL(d.url, location.origin); if (u.origin === location.origin) { g2 = u.searchParams.get('go'); } } catch (x) { }
         if (!g2 || !GO_OK[g2]) { return; }
-        try { if (typeof window.gtag === 'function') { window.gtag('event', 'app_open', { app_source: source(), launch: 'push' }); } } catch (x2) { }
         if (booted() && window.nvLoop) { runGo(g2); } else { queueGo(g2); }
       });
     }
@@ -3352,7 +3323,7 @@ html.nv-appshell #nvHub button{min-width:0}
       try { on = (await timeout(window.nvPush.enable(), 12000, 'timeout')) === true; } catch (e2) { on = false; }
       var txt = (window.nvPush.status && window.nvPush.status()) || '';
       msg.textContent = on ? '알림을 켰어요. 복습이 남은 날 저녁에 알려 드릴게요.' : (Notification.permission === 'denied' ? '알림 권한이 꺼져 있어요. 휴대폰 설정 → 앱 → 너야 → 알림에서 켤 수 있어요.' : '알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.');
-      if (on) { var bs = card.querySelector('.nvPushBtns'); if (bs) { bs.parentNode.removeChild(bs); } try { if (typeof window.gtag === 'function') { window.gtag('event', 'push_opt_in', { app_source: source(), where: 'check_done' }); } } catch (e3) { } }
+      if (on) { var bs = card.querySelector('.nvPushBtns'); if (bs) { bs.parentNode.removeChild(bs); } }
       else { b.disabled = false; }
     });
     var btns = box.querySelector('.nvResBtns');
